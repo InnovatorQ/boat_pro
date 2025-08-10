@@ -1,0 +1,10 @@
+{
+    "boat": {
+        "length": 0.75,
+        "width": 0.47
+    },
+    "emergency_threshold_s": 5,
+    "warning_threshold_s": 30,
+    "max_boats": 30,
+    "min_route_gap_m": 10
+}
