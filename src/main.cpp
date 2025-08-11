@@ -3,7 +3,7 @@
 #include "types.h"
 #include <iostream>
 #include <fstream>
-#include <json/json.h>  // jsoncpp header
+#include <jsoncpp/json/json.h>  // jsoncpp header
 #include <vector>
 #include <thread>
 #include <chrono>
@@ -96,6 +96,20 @@ SystemConfig loadConfig(const std::string& filename) {
     }
     
     return SystemConfig::fromJson(root);
+}
+
+// 【新增】加载通信配置
+communication::UDPConfig loadCommunicationConfig() {
+    communication::UDPConfig config;
+    
+    // 可以从配置文件加载，这里使用默认值
+    config.local_ip = "0.0.0.0";
+    config.local_port = 8888;
+    config.remote_ip = "255.255.255.255"; // 广播地址
+    config.remote_port = 8889;
+    config.enable_broadcast = true;
+    
+    return config;
 }
 
 // 创建测试数据 - 优化为产生不同级别警告的场景
@@ -197,12 +211,25 @@ int main() {
     // 加载配置
 
     SystemConfig config = loadConfig("../config/system_config.json");
-    
+    communication::UDPConfig comm_config = loadCommunicationConfig();
     // 创建船队管理器
     FleetManager fleet_manager(config);
     
     // 设置告警回调
     fleet_manager.setAlertCallback(alertCallback);
+    
+    // 【新增】初始化通信系统
+    std::cout << "初始化通信系统..." << std::endl;
+    if (!fleet_manager.initializeCommunication(comm_config)) {
+        std::cerr << "通信系统初始化失败，退出程序" << std::endl;
+        return -1;
+    }
+    
+    // 【新增】启动通信系统
+    if (!fleet_manager.startCommunication()) {
+        std::cerr << "启动通信系统失败，退出程序" << std::endl;
+        return -1;
+    }
     
     // 初始化测试数据
     auto test_docks = createTestDocks();
@@ -262,6 +289,27 @@ int main() {
         
         fleet_manager.updateBoatStates(test_boats);
         
+        // 【新增】广播船只状态
+        for (const auto& boat : test_boats) {
+            if (i % 2 == 0) { // 每2秒广播一次
+                fleet_manager.broadcastBoatState(boat, true, true);
+            }
+        }
+        
+        // 【新增】显示通信统计信息
+        if (i % 5 == 0) {
+            auto stats = fleet_manager.getCommunicationStatistics();
+            std::cout << "\n=== 通信统计 ===" << std::endl;
+            std::cout << "已发送数据包: " << stats.packets_sent << std::endl;
+            std::cout << "已接收数据包: " << stats.packets_received << std::endl;
+            std::cout << "已发送字节: " << stats.bytes_sent << std::endl;
+            std::cout << "已接收字节: " << stats.bytes_received << std::endl;
+            std::cout << "发送错误: " << stats.send_errors << std::endl;
+            std::cout << "接收错误: " << stats.receive_errors << std::endl;
+            std::cout << "================" << std::endl;
+        }
+        
+        
         // 显示当前所有船只状态
         for (const auto& boat : test_boats) {
             std::cout << "船只" << boat.sysid << ": " 
@@ -278,6 +326,6 @@ int main() {
     
     std::cout << "测试完成，停止监控..." << std::endl;
     fleet_manager.stopSafetyMonitoring();
-    
+    fleet_manager.stopCommunication(); // 【新增】停止通信系统
     return 0;
 }
