@@ -1,0 +1,16 @@
+{
+    "udp": {
+        "local_ip": "0.0.0.0",
+        "local_port": 8888,
+        "remote_ip": "255.255.255.255",
+        "remote_port": 8889,
+        "enable_broadcast": true,
+        "receive_timeout_ms": 1000,
+        "max_packet_size": 1024
+    },
+    "protocols": {
+        "enable_drone_id": true,
+        "enable_nmea2000": true,
+        "broadcast_interval_ms": 2000
+    }
+}

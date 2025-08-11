@@ -21,8 +21,15 @@ target_link_libraries(boat_pro_lib ${JSONCPP_LIBRARIES})
 add_executable(boat_pro src/main.cpp)
 target_link_libraries(boat_pro boat_pro_lib ${JSONCPP_LIBRARIES})
 
-# 创建测试程序
-file(GLOB_RECURSE TEST_SOURCES "tests/*.cpp")
-add_executable(boat_pro_test ${TEST_SOURCES})
-target_link_libraries(boat_pro_test boat_pro_lib ${JSONCPP_LIBRARIES})
+# 创建碰撞检测测试程序
+add_executable(test_collision_detector tests/test_collision_detector.cpp)
+target_link_libraries(test_collision_detector boat_pro_lib ${JSONCPP_LIBRARIES})
+
+# 创建网络测试程序
+add_executable(network_test network_test.cpp)
+target_link_libraries(network_test boat_pro_lib ${JSONCPP_LIBRARIES})
+
+# 创建通信测试程序
+add_executable(test_communication tests/test_communication.cpp)
+target_link_libraries(test_communication boat_pro_lib ${JSONCPP_LIBRARIES})
 

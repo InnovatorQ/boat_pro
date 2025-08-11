@@ -2,7 +2,7 @@
 #ifndef BOAT_PRO_TYPES_H
 #define BOAT_PRO_TYPES_H
 
-#include <json/json.h>  // jsoncpp header
+#include <jsoncpp/json/json.h>  // jsoncpp header
 #include <vector>
 #include <string>
 #include <memory>

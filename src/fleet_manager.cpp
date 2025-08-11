@@ -26,6 +26,59 @@ void FleetManager::initializeRoutes(const std::vector<RouteInfo>& routes) {
     collision_detector_->setRouteInfo(routes);
 }
 
+// 【新增】初始化通信系统
+bool FleetManager::initializeCommunication(const communication::UDPConfig& config) {
+    communicator_ = std::make_unique<communication::UDPCommunicator>(config);
+    
+    if (!communicator_->initialize()) {
+        std::cerr << "通信系统初始化失败" << std::endl;
+        return false;
+    }
+    
+    // 设置消息回调
+    communicator_->setDroneIDCallback(
+        [this](std::unique_ptr<communication::DroneIDMessage> msg) {
+            onDroneIDMessageReceived(std::move(msg));
+        });
+    
+    communicator_->setNMEA2000Callback(
+        [this](std::unique_ptr<communication::NMEA2000Message> msg) {
+            onNMEA2000MessageReceived(std::move(msg));
+        });
+    
+    communicator_->setBoatStateCallback(
+        [this](const BoatState& boat) {
+            onBoatStateReceived(boat);
+        });
+    
+    std::cout << "通信系统初始化成功" << std::endl;
+    return true;
+}
+
+// 【新增】启动通信系统
+bool FleetManager::startCommunication() {
+    if (!communicator_) {
+        std::cerr << "通信系统未初始化" << std::endl;
+        return false;
+    }
+    
+    if (!communicator_->startReceiving()) {
+        std::cerr << "启动通信接收失败" << std::endl;
+        return false;
+    }
+    
+    std::cout << "通信系统已启动" << std::endl;
+    return true;
+}
+
+// 【新增】停止通信系统
+void FleetManager::stopCommunication() {
+    if (communicator_) {
+        communicator_->stopReceiving();
+        std::cout << "通信系统已停止" << std::endl;
+    }
+}
+
 void FleetManager::updateBoatState(const BoatState& boat) {
     std::vector<BoatState> boats = {boat};
     collision_detector_->updateBoatStates(boats);
@@ -33,6 +86,24 @@ void FleetManager::updateBoatState(const BoatState& boat) {
 
 void FleetManager::updateBoatStates(const std::vector<BoatState>& boats) {
     collision_detector_->updateBoatStates(boats);
+}
+
+// 【新增】通过网络广播船只状态
+bool FleetManager::broadcastBoatState(const BoatState& boat, bool use_drone_id, bool use_nmea2000) {
+    if (!communicator_) {
+        std::cerr << "通信系统未初始化，无法广播" << std::endl;
+        return false;
+    }
+    
+    bool success = communicator_->sendBoatState(boat, use_drone_id, use_nmea2000);
+    
+    if (success) {
+        std::cout << "船只 " << boat.sysid << " 状态广播成功" << std::endl;
+    } else {
+        std::cerr << "船只 " << boat.sysid << " 状态广播失败" << std::endl;
+    }
+    
+    return success;
 }
 
 bool FleetManager::requestUndocking(int boat_id, int dock_id) {
@@ -104,6 +175,14 @@ std::vector<CollisionAlert> FleetManager::getCurrentAlerts() {
     return collision_detector_->detectCollisions();
 }
 
+// 【新增】获取通信统计信息
+communication::UDPCommunicator::Statistics FleetManager::getCommunicationStatistics() const {
+    if (!communicator_) {
+        return communication::UDPCommunicator::Statistics{};
+    }
+    return communicator_->getStatistics();
+}
+
 bool FleetManager::canUndock(int boat_id, int dock_id) {
     // 简化实现：检查是否有高优先级船只在附近
     auto alerts = collision_detector_->detectCollisions();
@@ -139,6 +218,38 @@ int FleetManager::findNearestAvailableDock(const BoatState& boat) {
     }
     
     return nearest_dock;
+}
+
+// 【新增】处理接收到的Drone ID消息
+void FleetManager::onDroneIDMessageReceived(std::unique_ptr<communication::DroneIDMessage> message) {
+    std::cout << "收到Drone ID消息，类型: " << static_cast<int>(message->getMessageType()) << std::endl;
+    
+    // 如果是位置消息，转换为船只状态并更新
+    if (message->getMessageType() == communication::DroneIDMessageType::LOCATION) {
+        auto* loc_msg = dynamic_cast<communication::DroneIDLocationMessage*>(message.get());
+        if (loc_msg) {
+            // 这里需要从消息中提取船只ID，简化处理使用固定ID
+            BoatState boat = communication::ProtocolConverter::fromDroneIDLocation(*loc_msg, 999);
+            updateBoatState(boat);
+        }
+    }
+}
+
+// 【新增】处理接收到的NMEA 2000消息
+void FleetManager::onNMEA2000MessageReceived(std::unique_ptr<communication::NMEA2000Message> message) {
+    std::cout << "收到NMEA 2000消息，PGN: " << static_cast<uint32_t>(message->getPGN()) << std::endl;
+    
+    // 这里可以实现NMEA 2000消息的缓存和组合逻辑
+    // 简化处理，仅记录接收
+}
+
+// 【新增】处理接收到的船只状态
+void FleetManager::onBoatStateReceived(const BoatState& boat) {
+    std::cout << "收到外部船只状态 - ID: " << boat.sysid 
+              << ", 位置: (" << boat.lat << ", " << boat.lng << ")" << std::endl;
+    
+    // 更新船只状态到系统中
+    updateBoatState(boat);
 }
 
 } // namespace boat_pro
