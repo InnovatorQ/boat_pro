@@ -1,3 +1,12 @@
 build/
 cmake-build-debug/
 .idea/
+COMMUNICATION_VERIFICATION_REPORT.md
+*.log
+REAL_SCENARIO_TEST_REPORT.md
+CLIENT_DATA_INTEGRATION_GUIDE.md
+mqtt_verify
+test_mqtt.sh
+test_real_scenario.sh
+test_logs/
+test/
