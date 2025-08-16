@@ -1,0 +1,41 @@
+{
+  "mqtt": {
+    "broker": {
+      "host": "localhost",
+      "port": 1883,
+      "username": "",
+      "password": "",
+      "client_id": "boat_safety_system",
+      "keep_alive": 60,
+      "clean_session": true
+    },
+    "connection": {
+      "connect_timeout_s": 5,
+      "reconnect_delay_s": 1,
+      "max_reconnect_attempts": 10,
+      "auto_reconnect": true
+    },
+    "qos": {
+      "default_publish": 1,
+      "default_subscribe": 1,
+      "critical_messages": 2
+    },
+    "topics": {
+      "base_topic": "boat_safety",
+      "retain_system_status": true,
+      "retain_statistics": false
+    }
+  },
+  "message_processing": {
+    "validate_messages": true,
+    "log_invalid_messages": true,
+    "max_message_size_kb": 64,
+    "message_timeout_s": 30
+  },
+  "system": {
+    "enable_heartbeat": true,
+    "heartbeat_interval_s": 10,
+    "status_publish_interval_s": 5,
+    "statistics_publish_interval_s": 30
+  }
+}

@@ -2,23 +2,73 @@
 
 # 无人船作业安全预测系统构建脚本
 
-echo "开始构建无人船安全预测系统..."
+set -e  # 遇到错误时退出
+
+echo "=== 无人船作业安全预测系统 MQTT 接口构建脚本 ==="
+
+# 检查依赖
+echo "检查系统依赖..."
+
+# 检查是否安装了必要的包
+check_package() {
+    if ! dpkg -l | grep -q "^ii  $1 "; then
+        echo "错误: 未找到包 $1"
+        echo "请运行: sudo apt-get install $1"
+        exit 1
+    else
+        echo "✓ 找到包: $1"
+    fi
+}
+
+# 检查必要的开发包
+check_package "libmosquitto-dev"
+check_package "libjsoncpp-dev"
+check_package "cmake"
+check_package "build-essential"
+
+# 检查MQTT代理是否运行
+echo "检查MQTT代理状态..."
+if systemctl is-active --quiet mosquitto; then
+    echo "✓ MQTT代理 (mosquitto) 正在运行"
+else
+    echo "⚠ MQTT代理未运行，尝试启动..."
+    if sudo systemctl start mosquitto; then
+        echo "✓ MQTT代理启动成功"
+    else
+        echo "⚠ 无法启动MQTT代理，请手动检查"
+    fi
+fi
 
 # 创建构建目录
-mkdir -p build
+echo "创建构建目录..."
+if [ -d "build" ]; then
+    echo "清理现有构建目录..."
+    rm -rf build
+fi
+mkdir build
 cd build
 
 # 运行CMake配置
-cmake ..
+echo "运行CMake配置..."
+cmake .. -DCMAKE_BUILD_TYPE=Release
 
 # 编译项目
-make -j4
+echo "编译项目..."
+make -j$(nproc)
 
-if [ $? -eq 0 ]; then
-    echo "构建成功!"
-    echo "可执行文件位于: build/boat_pro"
-    echo "测试程序位于: build/boat_pro_test"
-else
-    echo "构建失败!"
-    exit 1
-fi
+echo "=== 构建完成 ==="
+echo ""
+echo "可执行文件位置:"
+echo "  - MQTT示例程序: $(pwd)/mqtt_example"
+echo ""
+echo "运行示例:"
+echo "  cd $(pwd)"
+echo "  ./mqtt_example"
+echo ""
+echo "测试MQTT通信:"
+echo "  # 订阅告警消息"
+echo "  mosquitto_sub -h localhost -t 'boat_safety/output/collision_alert/+'"
+echo ""
+echo "  # 发布测试数据"
+echo "  mosquitto_pub -h localhost -t 'boat_safety/input/boat_state/1' \\"
+echo "    -m '{\"sysid\":1,\"timestamp\":$(date +%s),\"lat\":30.549832,\"lng\":114.342922,\"heading\":90.0,\"speed\":2.5,\"status\":2,\"route_direction\":1}'"
