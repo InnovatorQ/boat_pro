@@ -148,94 +148,6 @@ mqtt.setMessageCallback([](const MQTTMessage& msg) {
 });
 ```
 
-## 🔧 系统配置管理
-
-### 17. 配置文件管理
-
-系统配置数据统一存储在`config/system_config.json`文件中，不应在测试脚本中硬编码。
-
-#### A. 标准配置文件位置
-```
-boat_pro/
-├── config/
-│   ├── system_config.json      # 系统配置文件
-│   ├── mqtt_config.json        # MQTT配置文件
-│   └── communication_config.json # 通信配置文件
-```
-
-#### B. 系统配置文件格式
-```json
-{
-    "boat": {
-        "length": 0.75,              // 船只长度(米)
-        "width": 0.47                // 船只宽度(米)
-    },
-    "emergency_threshold_s": 5,      // 紧急阈值(秒)
-    "warning_threshold_s": 30,       // 警告阈值(秒)
-    "max_boats": 30,                 // 最大船只数量
-    "min_route_gap_m": 10           // 最小航线间距(米)
-}
-```
-
-### 18. 配置管理工具
-
-#### A. 使用配置管理工具
-```bash
-# 显示当前配置
-./scripts/config_manager.sh show
-
-# 验证配置文件
-./scripts/config_manager.sh validate
-
-# 发布配置到MQTT
-./scripts/config_manager.sh publish
-
-# 清除MQTT中的保留配置
-./scripts/config_manager.sh clear
-
-# 备份当前配置
-./scripts/config_manager.sh backup
-
-# 恢复配置备份
-./scripts/config_manager.sh restore
-```
-
-#### B. 配置发布流程
-```bash
-# 1. 修改配置文件
-vim config/system_config.json
-
-# 2. 验证配置
-./scripts/config_manager.sh validate
-
-# 3. 发布到MQTT
-./scripts/config_manager.sh publish
-
-# 4. 验证接收
-mosquitto_sub -h localhost -t "boat_pro/system_config" -v
-```
-
-### 19. 外部系统集成
-
-#### A. 从配置文件读取
-外部系统应该从标准配置文件读取系统配置，而不是硬编码：
-
-```bash
-# 正确方式：从配置文件读取
-cat config/system_config.json | mosquitto_pub -h localhost -t "boat_pro/system_config" -s -r
-
-# 错误方式：硬编码配置数据
-mosquitto_pub -h localhost -t "boat_pro/system_config" -m '{"boat":{"length":0.8}}'
-```
-
-#### B. 配置同步
-```bash
-# 发送标准配置
-./scripts/send_external_data.sh system_config
-
-# 这会自动从config/system_config.json读取数据
-```
-
 ## 🚀 快速开始
 
 ### 14. 运行数据接收器
@@ -758,4 +670,3 @@ mqtt.setBoatStateCallback([&](const BoatState& boat) {
 });
 ```
 
-通过以上详细的配置和示例，您可以完全掌握如何通过MQTT接口接收外界发来的各种数据，并进行相应的业务处理。

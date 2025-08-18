@@ -133,20 +133,7 @@ send_collision_alert() {
 send_system_config() {
     echo "⚙️ 发送系统配置更新..."
     
-    # 获取脚本所在目录
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    CONFIG_FILE="$SCRIPT_DIR/../config/system_config.json"
-    
-    if [ -f "$CONFIG_FILE" ]; then
-        echo "  从配置文件读取: $CONFIG_FILE"
-        cat "$CONFIG_FILE" | mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -t "boat_pro/system_config" -s -r
-        echo "✅ 系统配置发送完成（已保留）"
-    else
-        echo "❌ 配置文件不存在: $CONFIG_FILE"
-        echo "  使用默认配置..."
-        
-        # 备用默认配置
-        DEFAULT_CONFIG='{
+    CONFIG_DATA='{
   "boat": {
     "length": 0.75,
     "width": 0.47
@@ -156,14 +143,15 @@ send_system_config() {
   "max_boats": 30,
   "min_route_gap_m": 10
 }'
-        echo "$DEFAULT_CONFIG" | mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -t "boat_pro/system_config" -s -r
-        echo "✅ 默认系统配置发送完成（已保留）"
-    fi
+    
+    echo "$CONFIG_DATA" | mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -t "boat_pro/system_config" -s -r
+    
+    echo "✅ 系统配置发送完成（已保留）"
 }
 
-# 发送舰队命令
+# 发送命令
 send_fleet_command() {
-    echo "📋 发送舰队命令..."
+    echo "📋 发送命令..."
     
     # 减速命令
     SLOW_DOWN_CMD='{
