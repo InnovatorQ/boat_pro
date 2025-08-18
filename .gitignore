@@ -9,4 +9,9 @@ mqtt_verify
 test_mqtt.sh
 test_real_scenario.sh
 test_logs/
+<<<<<<< HEAD
 test/
+=======
+test/
+examples/
+>>>>>>> 461c1cc

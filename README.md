@@ -1,87 +1,264 @@
 /# boat_pro
 无人船作业安全预测系统
-一、无人船作业安全预测系统需求：
-1.无人船驶出船坞时碰撞预测
-2.无人船驶入船坞时碰撞预测
-2.无人船按规划航线运行时前后船碰撞预测
-3.无人船对向航行时的碰撞安全预测。
- 
-二.	优先级说明
-1.出坞碰撞检测：优先级最低，需要等待入船坞的船，以及正常行驶的被碰撞船驶出危险位置后，才能出坞。
-2.入坞碰撞检测：优先级最高，在某个船开始入坞转向时，跟随其后的船需要等待入坞完成后，才能继续通行。
-3.优先级等级：驶入船坞 ＞ 正常航行 ＞ 驶出船坞
- 
-三、应用场景及功能性需求
-（一）、应用场景
-无人船长度为75CM，宽度 47CM（项目暂定以该尺寸的无人船为标准开发）
-船的数量≤30条。
-固定航线巡航。最多 2 条航线，一条顺时针，一条逆时针，2 条航线最小横向距离大于 10 米。
-水域类似静水状态、流速低。
-（二）、功能性需求
-1.	无人船的尺寸等参数做成配置参数，可修改，以便适配不同的船只。
-2.	进船坞定义：当船完成作业，到达集结点（终点/起始点）后，船进入待进坞状态，船转入进坞模式，无人船集群管理系统接收到船待进坞信息，判断船能否进坞，进几号船坞，并将信息发送给待进坞船只。当船只驶入船坞，并且速度为0时，船进入锁定状态，进坞程序结束。
-3.	出船坞定义：用户提出出坞请求，由当前船控向无人船集群管理系统发出请示，系统收到后发送解锁命令到船坞，船坞反馈已解锁后，系统再发送出坞指令给船，船收到命令后自动航行到集结点（起始点/终点）；船到达集结点后（悬停状态），向服务器询问是否进入航线执行相应航线。
- 
-四.	拟输出的数据：
-1. 系统及时给出碰撞告警紧急程度（3级），以及相应的避碰决策建议。
-   紧急程度说明：
-    紧急：保证最低限度的从当前速度到完全停止，预留 5s（可调）；
-          碰撞距离小于速度x 5（举例3m/s x 5s=15m）
-    警告：保证最低限度的从当前速度到完全停止，预留 30s（可调）；
-          碰撞距离小于速度x 30（举例 5m/s x 30s=150m）
-    正常：从紧急或警告恢复，即不在危险区域，大于30s；
-          碰撞距离大于速度 x 30。 
 
-2.	碰撞告警船ID。
-    当前船 id，
-    前向被碰撞船 id。若存在多个时，仅上报距离最近船 id，
-    对向被碰撞船 id。若存在多个时，需要上报所有船 id。
- 
-3.	预计发生碰撞的位置：经纬度（WGS84）
- 
-4. 预计发生碰撞的时间：秒
-   
-5.	对向碰撞告警时两船的实际航向（Headinㅤ）：单位与输入保持一致，度，0 为正北。
-五. 甲方提供给的数据类型和格式
-（一）. 统一格式：采用 JSON 格式为主，便于接口交换与日志存储。
-（二）. 统一单位：时间为秒（s），坐标为 WGS84经纬度，速度为米/秒（m/s），角度为度（°）。
-（三）. 数据格式可扩展性强：所有结构均可扩展其他字段。
-（四）. 数据格式样例如下：
-无人船动态数据（BoatState）：
+## 系统概述
+
+无人船作业安全预测系统是一个专为无人船集群设计的智能安全管理系统，提供实时碰撞预测、安全告警和智能决策支持。
+
+## 核心功能
+
+### 1. 碰撞预测功能
+- **出坞碰撞预测**: 无人船驶出船坞时的碰撞风险评估
+- **入坞碰撞预测**: 无人船驶入船坞时的碰撞安全预测
+- **航线碰撞预测**: 按规划航线运行时前后船碰撞预测
+- **对向碰撞预测**: 对向航行时的碰撞安全预测
+
+### 2. 优先级管理
+- **驶入船坞**: 最高优先级
+- **正常航行**: 中等优先级  
+- **驶出船坞**: 最低优先级
+
+### 3. 告警系统
+- **紧急级别**: 碰撞距离 < 速度×5秒，预留5秒停船时间
+- **警告级别**: 碰撞距离 < 速度×30秒，预留30秒反应时间
+- **正常级别**: 碰撞距离 > 速度×30秒，安全状态
+
+### 4. 通信接口
+- **UDP通信**: 支持Drone ID和NMEA 2000协议
+- **MQTT通信**: 基于MQTT协议的实时通信接口 ⭐ **新增功能**
+
+## 应用场景
+
+- **船只规格**: 75cm×47cm无人船（可配置）
+- **集群规模**: 支持最多30条无人船
+- **航线设计**: 最多2条航线（顺时针/逆时针）
+- **安全间距**: 航线间距>10米
+- **水域环境**: 静水或低流速水域
+
+## 技术架构
+
+### 核心模块
+- **CollisionDetector**: 碰撞检测算法
+- **FleetManager**: 舰队管理和协调
+- **UDPCommunicator**: UDP通信接口
+- **MQTTCommunicator**: MQTT通信接口 ⭐ **新增**
+- **GeometryUtils**: 地理计算工具
+
+### 数据格式
+- **统一格式**: JSON格式数据交换
+- **统一单位**: 时间(秒)、坐标(WGS84)、速度(m/s)、角度(度)
+- **可扩展性**: 所有数据结构支持字段扩展
+
+## 快速开始
+
+### 1. 系统要求
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install build-essential cmake
+sudo apt-get install libjsoncpp-dev libmosquitto-dev mosquitto
+
+# 启动MQTT服务
+sudo systemctl start mosquitto
+sudo systemctl enable mosquitto
+```
+
+### 2. 编译项目
+```bash
+git clone <repository>
+cd boat_pro
+mkdir build && cd build
+cmake ..
+make
+```
+
+### 3. 运行程序
+```bash
+# 主程序
+./boat_pro
+
+# MQTT示例程序
+./mqtt_example
+
+# 简单MQTT测试
+./simple_mqtt_test
+```
+
+## MQTT通信接口 ⭐ **新功能**
+
+### 客户端配置
+- **IP地址**: 127.0.0.1
+- **端口**: 2000 (可修改)
+- **账号**: vEagles
+- **密码**: 123456
+- **客户端ID**: 1000
+
+### MPC客户端主题结构
+```
+mpc/                   # MPC客户端发布的主题
+├── BoatState          # 无人船动态数据 (MPC→GCS)
+├── DockInfo           # 船坞静态数据 (MPC→GCS)
+├── RouteInfo          # 船线定义数据 (MPC→GCS)
+└── Config             # 系统配置文件 (MPC→GCS)
+
+gcs/                   # GCS(boat_pro)发布的主题
+├── CollisionAlert     # 碰撞告警 (GCS→MPC)
+├── SafetyStatus       # 安全状态 (GCS→MPC)
+├── FleetCommand       # 舰队命令 (GCS→MPC)
+├── SystemStatus       # 系统状态 (GCS→MPC)
+└── Heartbeat          # 心跳消息 (GCS→MPC)
+```
+
+### 快速测试
+```bash
+# 编译MPC客户端测试程序
+cd build && make mpc_client_test
+
+# 运行MPC客户端测试程序
+./mpc_client_test
+
+# 运行MPC测试脚本
+./scripts/test_mpc_client.sh
+
+# 监听所有MPC和GCS消息
+mosquitto_sub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 -t "mpc/#" -t "gcs/#" -v
+
+# 发布MPC测试消息
+mosquitto_pub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 \
+  -t "mpc/BoatState" \
+  -m '{"sysid":1,"lat":30.5,"lng":114.3,"speed":2.5}'
+```
+
+## 输出数据
+
+### 1. 碰撞告警信息
+- **紧急程度**: 3级告警等级（正常/警告/紧急）
+- **船只标识**: 当前船ID、前向船ID、对向船ID
+- **位置信息**: 预计碰撞位置（WGS84坐标）
+- **时间预测**: 预计碰撞时间（秒）
+- **航向信息**: 对向碰撞时的双方航向
+- **决策建议**: 避碰决策建议
+
+### 2. 数据示例
+```json
 {
-  "sysid": 1,
-  "timestamp": 1722325256.530,   // 接收时间戳（UTC或本机时间，单位：秒）
-  "lat": 30.549832,              // 纬度（WGS84）
-  "lng": 114.342922,            // 经度（WGS84）
-  "heading": 90.0,              // 航向角（0°为正北，顺时针增加）
-  "speed": 2.5,                 // 船速，单位：米/秒
-  "status": 2,                  // 航行状态（1-出坞，2-正常航行，3-入坞）
-  "route_direction": 1           // 航线方向（1-顺时针，2-逆时针）
-}
-船坞静态数据（DockInfo）：
-{
-  "dock_id": 1,
-  "lat": 30.549100,
-  "lng": 114.343000
-}
-航线定义数据（RouteInfo）：
-{
-  "route_id": 1,
-  "direction": 1,                // 1-顺时针，2-逆时针
-  "points": [
-    {"lat": 30.549500, "lng": 114.342800},
-    {"lat": 30.549800, "lng": 114.343300},
-    {"lat": 30.550100, "lng": 114.343800}
-  ]
-}
-系统配置文件：
-{
-  "boat": {
-    "length": 0.75,              // 单位：米
-    "width": 0.47
+  "current_boat_id": 1,
+  "level": 2,
+  "collision_time": 15.5,
+  "collision_position": {
+    "lat": 30.549832,
+    "lng": 114.342922
   },
-  "emergency_threshold_s": 5,     // 紧急判断时间阈值（秒）
-  "warning_threshold_s": 30,      // 警告判断时间阈值（秒）
-  "max_boats": 30,
-  "min_route_gap_m": 10         // 最小航线横向间距
+  "front_boat_ids": [2],
+  "oncoming_boat_ids": [3, 4],
+  "decision_advice": "减速避让"
 }
+```
+
+## 配置文件
+
+### 系统配置 (`config/system_config.json`)
+```json
+{
+    "boat": {
+        "length": 0.75,
+        "width": 0.47
+    },
+    "emergency_threshold_s": 5,
+    "warning_threshold_s": 30,
+    "max_boats": 30,
+    "min_route_gap_m": 10
+}
+```
+
+### MQTT配置 (`config/mqtt_config.json`)
+```json
+{
+    "broker": {
+        "host": "localhost",
+        "port": 1883,
+        "client_id": "boat_pro_client"
+    },
+    "topics": {
+        "boat_state": "boat_pro/boat_state/",
+        "collision_alert": "boat_pro/collision_alert/"
+    }
+}
+```
+
+## 项目结构
+
+```
+boat_pro/
+├── src/                    # 源代码
+├── include/                # 头文件
+├── config/                 # 配置文件
+├── examples/               # 示例程序
+├── tests/                  # 测试程序
+├── docs/                   # 文档目录
+├── build/                  # 构建目录
+└── CMakeLists.txt         # 构建配置
+```
+
+## 文档目录
+
+详细文档请参考 `docs/` 目录：
+
+- **[MQTT集成文档](docs/MQTT_INTEGRATION.md)** - MQTT接口详细技术文档
+- **[MQTT使用指南](docs/MQTT_USAGE.md)** - MQTT功能使用说明
+- **[MQTT集成总结](docs/MQTT_INTEGRATION_SUMMARY.md)** - MQTT集成完成总结
+- **[通信协议文档](docs/COMMUNICATION.md)** - UDP通信协议说明
+- **[客户端集成指南](docs/CLIENT_DATA_INTEGRATION_GUIDE.md)** - 客户端数据集成指南
+- **[通信验证报告](docs/COMMUNICATION_VERIFICATION_REPORT.md)** - 通信功能验证报告
+- **[实际场景测试报告](docs/REAL_SCENARIO_TEST_REPORT.md)** - 实际场景测试报告
+
+## 开发指南
+
+### API使用示例
+```cpp
+#include "mqtt_communicator.h"
+#include "fleet_manager.h"
+
+// 创建MQTT通信器
+MQTTConfig config;
+config.broker_host = "localhost";
+MQTTCommunicator mqtt(config);
+
+// 设置回调
+mqtt.setBoatStateCallback([](const BoatState& boat) {
+    std::cout << "收到船只状态: " << boat.sysid << std::endl;
+});
+
+// 连接并发布消息
+mqtt.initialize();
+mqtt.connect();
+mqtt.publishBoatState(boat_state);
+```
+
+### 扩展开发
+- 支持自定义消息类型
+- 可集成Web监控界面
+- 支持移动应用接入
+- 可连接云平台服务
+
+## 测试验证
+
+### 单元测试
+```bash
+# 运行所有测试
+make test
+
+# 运行特定测试
+./mqtt_test
+```
+
+### 集成测试
+```bash
+# MQTT功能测试
+./simple_mqtt_test
+
+# 完整系统测试
+./mqtt_example
+```
+
+

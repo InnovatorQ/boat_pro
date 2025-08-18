@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "mqtt": {
     "broker": {
       "host": "localhost",
@@ -38,4 +39,42 @@
     "status_publish_interval_s": 5,
     "statistics_publish_interval_s": 30
   }
+=======
+    "broker": {
+        "host": "127.0.0.1",
+        "port": 2000,
+        "client_id": "1000",
+        "username": "vEagles",
+        "password": "123456",
+        "clean_session": true,
+        "keep_alive": 60,
+        "connect_timeout": 30
+    },
+    "ssl": {
+        "enable": false,
+        "ca_cert_file": "",
+        "cert_file": "",
+        "key_file": ""
+    },
+    "topics": {
+        "subscribe": {
+            "boat_state": "mpc/BoatState",
+            "dock_info": "mpc/DockInfo", 
+            "route_info": "mpc/RouteInfo",
+            "system_config": "mpc/Config"
+        },
+        "publish": {
+            "collision_alert": "gcs/CollisionAlert",
+            "safety_status": "gcs/SafetyStatus",
+            "fleet_command": "gcs/FleetCommand",
+            "system_status": "gcs/SystemStatus",
+            "heartbeat": "gcs/Heartbeat"
+        }
+    },
+    "publishing": {
+        "default_qos": 1,
+        "retain_messages": false,
+        "publish_interval_ms": 1000
+    }
+>>>>>>> 461c1cc
 }
