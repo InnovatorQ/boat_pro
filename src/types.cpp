@@ -45,6 +45,18 @@ BoatState BoatState::fromJson(const Json::Value& json) {
     return boat;
 }
 
+// 实例方法版本
+void BoatState::loadFromJson(const Json::Value& json) {
+    sysid = json["sysid"].asInt();
+    timestamp = json["timestamp"].asDouble();
+    lat = json["lat"].asDouble();
+    lng = json["lng"].asDouble();
+    heading = json["heading"].asDouble();
+    speed = json["speed"].asDouble();
+    status = static_cast<BoatStatus>(json["status"].asInt());
+    route_direction = static_cast<RouteDirection>(json["route_direction"].asInt());
+}
+
 // DockInfo implementations
 Json::Value DockInfo::toJson() const {
     Json::Value json;
@@ -111,6 +123,16 @@ SystemConfig SystemConfig::fromJson(const Json::Value& json) {
     config.max_boats = json["max_boats"].asInt();
     config.min_route_gap_m = json["min_route_gap_m"].asDouble();
     return config;
+}
+
+// 实例方法版本
+void SystemConfig::loadFromJson(const Json::Value& json) {
+    boat.length = json["boat"]["length"].asDouble();
+    boat.width = json["boat"]["width"].asDouble();
+    emergency_threshold_s = json["emergency_threshold_s"].asDouble();
+    warning_threshold_s = json["warning_threshold_s"].asDouble();
+    max_boats = json["max_boats"].asInt();
+    min_route_gap_m = json["min_route_gap_m"].asDouble();
 }
 
 SystemConfig SystemConfig::getDefault() {

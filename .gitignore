@@ -10,3 +10,4 @@ test_mqtt.sh
 test_real_scenario.sh
 test_logs/
 test/
+examples/

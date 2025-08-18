@@ -54,6 +54,7 @@ struct BoatState {
     
     Json::Value toJson() const;
     static BoatState fromJson(const Json::Value& json);
+    void loadFromJson(const Json::Value& json);  // 实例方法版本
     GeoPoint getPosition() const { return GeoPoint(lat, lng); }
 };
 
@@ -92,6 +93,7 @@ struct SystemConfig {
     
     Json::Value toJson() const;
     static SystemConfig fromJson(const Json::Value& json);
+    void loadFromJson(const Json::Value& json);  // 实例方法版本
     static SystemConfig getDefault();
 };
 
