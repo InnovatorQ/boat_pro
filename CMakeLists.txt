@@ -11,14 +11,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2")
 # 查找依赖包
 find_package(PkgConfig REQUIRED)
 
-<<<<<<< HEAD
-# 查找mosquitto库
-pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
-
-# 查找jsoncpp库
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-=======
 # 查找线程库用于UDP通信
 find_package(Threads REQUIRED)
 
@@ -28,9 +20,9 @@ if(NOT MOSQUITTO_LIB)
     message(FATAL_ERROR "libmosquitto not found. Please install mosquitto development library.")
 endif()
 
-include_directories(include)
-include_directories(${JSONCPP_INCLUDE_DIRS})
->>>>>>> 461c1cc
+# 查找jsoncpp库
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(JSONCPP REQUIRED jsoncpp)
 
 # 如果找不到jsoncpp，尝试其他方式
 if(NOT JSONCPP_FOUND)
@@ -41,14 +33,7 @@ endif()
 # 设置包含目录
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
-    ${MOSQUITTO_INCLUDE_DIRS}
     ${JSONCPP_INCLUDE_DIRS}
-)
-
-# 设置库目录
-link_directories(
-    ${MOSQUITTO_LIBRARY_DIRS}
-    ${JSONCPP_LIBRARY_DIRS}
 )
 
 # 收集源文件
@@ -58,21 +43,6 @@ file(GLOB_RECURSE SOURCES
 
 # 创建静态库
 add_library(boat_pro_lib STATIC ${SOURCES})
-<<<<<<< HEAD
-
-# 链接库
-target_link_libraries(boat_pro_lib
-    ${MOSQUITTO_LIBRARIES}
-    ${JSONCPP_LIBRARIES}
-    pthread
-)
-
-# 设置编译标志
-target_compile_options(boat_pro_lib PRIVATE
-    ${MOSQUITTO_CFLAGS_OTHER}
-    ${JSONCPP_CFLAGS_OTHER}
-)
-=======
 target_link_libraries(boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
 
 # 创建主程序
@@ -117,11 +87,6 @@ target_link_libraries(heartbeat_monitor boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQ
 # 创建MPC客户端测试程序
 add_executable(mpc_client_test examples/mpc_client_test.cpp)
 target_link_libraries(mpc_client_test boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
->>>>>>> 461c1cc
-
-# 创建示例程序
-add_executable(mqtt_example examples/mqtt_example.cpp)
-target_link_libraries(mqtt_example boat_pro_lib)
 
 # 添加仿真器
 add_subdirectory(simulation)
@@ -143,12 +108,8 @@ install(FILES config/mqtt_config.json
 # 创建测试目标（可选）
 enable_testing()
 
-# 如果有测试文件，可以添加测试
-# add_subdirectory(tests)
-
 # 打印配置信息
-message(STATUS "Mosquitto libraries: ${MOSQUITTO_LIBRARIES}")
-message(STATUS "Mosquitto include dirs: ${MOSQUITTO_INCLUDE_DIRS}")
+message(STATUS "Mosquitto libraries: ${MOSQUITTO_LIB}")
 message(STATUS "JsonCpp libraries: ${JSONCPP_LIBRARIES}")
 message(STATUS "JsonCpp include dirs: ${JSONCPP_INCLUDE_DIRS}")
 

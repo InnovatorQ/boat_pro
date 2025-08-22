@@ -1,80 +1,77 @@
 {
-<<<<<<< HEAD
-  "mqtt": {
-    "broker": {
-      "host": "localhost",
-      "port": 1883,
-      "username": "",
-      "password": "",
-      "client_id": "boat_safety_system",
-      "keep_alive": 60,
-      "clean_session": true
-    },
-    "connection": {
-      "connect_timeout_s": 5,
-      "reconnect_delay_s": 1,
-      "max_reconnect_attempts": 10,
-      "auto_reconnect": true
-    },
-    "qos": {
-      "default_publish": 1,
-      "default_subscribe": 1,
-      "critical_messages": 2
-    },
-    "topics": {
-      "base_topic": "boat_safety",
-      "retain_system_status": true,
-      "retain_statistics": false
-    }
-  },
-  "message_processing": {
-    "validate_messages": true,
-    "log_invalid_messages": true,
-    "max_message_size_kb": 64,
-    "message_timeout_s": 30
-  },
-  "system": {
-    "enable_heartbeat": true,
-    "heartbeat_interval_s": 10,
-    "status_publish_interval_s": 5,
-    "statistics_publish_interval_s": 30
-  }
-=======
     "broker": {
         "host": "127.0.0.1",
         "port": 2000,
-        "client_id": "1000",
         "username": "vEagles",
         "password": "123456",
-        "clean_session": true,
         "keep_alive": 60,
-        "connect_timeout": 30
+        "clean_session": true
     },
-    "ssl": {
-        "enable": false,
-        "ca_cert_file": "",
-        "cert_file": "",
-        "key_file": ""
-    },
-    "topics": {
-        "subscribe": {
-            "boat_state": "mpc/BoatState",
-            "dock_info": "mpc/DockInfo", 
-            "route_info": "mpc/RouteInfo",
-            "system_config": "mpc/Config"
+    "mpc_client": {
+        "client_id": "MPC_CLIENT_001",
+        "subscribe_topics": {
+            "boat_state": "BoatState",
+            "dock_info": "DockInfo",
+            "route_info": "RouteInfo",
+            "config": "Config"
         },
-        "publish": {
-            "collision_alert": "gcs/CollisionAlert",
-            "safety_status": "gcs/SafetyStatus",
-            "fleet_command": "gcs/FleetCommand",
-            "system_status": "gcs/SystemStatus",
-            "heartbeat": "gcs/Heartbeat"
+        "publish_topics": {
+            "collision_alert": "CollisionAlert",
+            "safety_status": "SafetyStatus",
+            "fleet_command": "FleetCommand",
+            "system_status": "SystemStatus",
+            "heartbeat": "Heartbeat"
         }
     },
-    "publishing": {
-        "default_qos": 1,
-        "retain_messages": false,
-        "publish_interval_ms": 1000
+    "gcs_client": {
+        "client_id": "GCS_CLIENT_001",
+        "subscribe_topics": {
+            "collision_alert": "CollisionAlert",
+            "safety_status": "SafetyStatus",
+            "fleet_command": "FleetCommand",
+            "system_status": "SystemStatus",
+            "heartbeat": "Heartbeat"
+        },
+        "publish_topics": {
+            "boat_state": "BoatState",
+            "dock_info": "DockInfo",
+            "route_info": "RouteInfo",
+            "config": "Config"
+        }
+    },
+    "collision_alert_format": {
+        "description": "碰撞告警消息格式定义",
+        "required_fields": {
+            "alert_level": "碰撞紧急程度 (1=正常, 2=警告, 3=紧急)",
+            "avoidance_decision": "相应避碰决策建议",
+            "alert_boat_id": "告警船只ID",
+            "collision_position": {
+                "lat": "预计碰撞位置纬度",
+                "lng": "预计碰撞位置经度"
+            },
+            "collision_time": "预计碰撞时间(秒)",
+            "oncoming_collision_info": {
+                "boat1_heading": "船只1实际航向(度,0为正北)",
+                "boat2_heading": "船只2实际航向(度,0为正北)",
+                "description": "仅对向碰撞警告时包含此字段"
+            }
+        }
+    },
+    "qos_settings": {
+        "BoatState": 0,
+        "DockInfo": 1,
+        "RouteInfo": 1,
+        "Config": 2,
+        "CollisionAlert": 2,
+        "SafetyStatus": 1,
+        "FleetCommand": 2,
+        "SystemStatus": 1,
+        "Heartbeat": 0
+    },
+    "publish_intervals": {
+        "boat_state_hz": 1.0,
+        "safety_status_hz": 0.2,
+        "system_status_hz": 0.1,
+        "heartbeat_hz": 0.1
     }
->>>>>>> 461c1cc
 }

@@ -3,7 +3,7 @@
 
 ## 系统概述
 
-无人船作业安全预测系统是一个专为无人船集群设计的智能安全管理系统，提供实时碰撞预测、安全告警和智能决策支持。
+无人船作业安全预测系统是一个专为无人船集群设计的智能安全管理系统，提供实时碰撞预测、安全告警和智能决策支持。系统采用先进的MQTT通信架构，支持MPC（模型预测控制）与GCS（地面控制站）之间的双向实时通信。
 
 ## 核心功能
 
@@ -25,7 +25,7 @@
 
 ### 4. 通信接口
 - **UDP通信**: 支持Drone ID和NMEA 2000协议
-- **MQTT通信**: 基于MQTT协议的实时通信接口 ⭐ **新增功能**
+- **MQTT通信**: 基于MQTT协议的实时通信接口，支持MPC与GCS双向通信
 
 ## 应用场景
 
@@ -84,49 +84,103 @@ make
 ./simple_mqtt_test
 ```
 
-## MQTT通信接口 ⭐ **新功能**
+## MQTT通信接口
 
 ### 客户端配置
 - **IP地址**: 127.0.0.1
-- **端口**: 2000 (可修改)
+- **端口**: 2000
 - **账号**: vEagles
 - **密码**: 123456
 - **客户端ID**: 1000
 
-### MPC客户端主题结构
-```
-mpc/                   # MPC客户端发布的主题
-├── BoatState          # 无人船动态数据 (MPC→GCS)
-├── DockInfo           # 船坞静态数据 (MPC→GCS)
-├── RouteInfo          # 船线定义数据 (MPC→GCS)
-└── Config             # 系统配置文件 (MPC→GCS)
+### MQTT主题架构设计
 
-gcs/                   # GCS(boat_pro)发布的主题
-├── CollisionAlert     # 碰撞告警 (GCS→MPC)
-├── SafetyStatus       # 安全状态 (GCS→MPC)
-├── FleetCommand       # 舰队命令 (GCS→MPC)
-├── SystemStatus       # 系统状态 (GCS→MPC)
-└── Heartbeat          # 心跳消息 (GCS→MPC)
+#### MPC订阅主题 (GCS → MPC)
+```
+BoatState     # 船只状态数据
+DockInfo      # 船坞信息数据  
+RouteInfo     # 航线信息数据
+Config        # 系统配置数据
+```
+
+#### MPC发布主题 (MPC → GCS)
+```
+CollisionAlert    # 碰撞告警信息
+SafetyStatus      # 安全状态
+FleetCommand      # 舰队命令
+SystemStatus      # 系统状态
+Heartbeat         # 心跳信息
+```
+
+#### GCS订阅主题 (MPC → GCS)
+```
+CollisionAlert    # 碰撞告警信息，包含：
+                  # - alert_level: 碰撞紧急程度 (1=正常, 2=警告, 3=紧急)
+                  # - avoidance_decision: 相应避碰决策建议
+                  # - alert_boat_id: 告警船只ID
+                  # - collision_position: 预计发生碰撞的位置(经纬度)
+                  # - collision_time: 预计碰撞时间(秒)
+                  # - oncoming_collision_info: 对向碰撞时两船实际航向(度,0为正北)
+SafetyStatus      # 安全状态
+FleetCommand      # 舰队命令
+SystemStatus      # 系统状态
+Heartbeat         # 心跳信息
+```
+
+#### GCS发布主题 (GCS → MPC)
+```
+BoatState     # 船只状态数据
+DockInfo      # 船坞信息数据
+RouteInfo     # 航线信息数据
+Config        # 系统配置数据
+```
+
+### 碰撞告警消息格式
+
+CollisionAlert主题的消息格式包含以下字段：
+
+```json
+{
+  "alert_level": 3,                    // 碰撞紧急程度 (1=正常, 2=警告, 3=紧急)
+  "avoidance_decision": "立即减速并右转避让",  // 相应避碰决策建议
+  "alert_boat_id": 1,                  // 告警船只ID
+  "collision_position": {              // 预计发生碰撞的位置
+    "lat": 30.549832,                  // 纬度
+    "lng": 114.342922                  // 经度
+  },
+  "collision_time": 15.5,              // 预计碰撞时间(秒)
+  "oncoming_collision_info": {         // 对向碰撞时的航向信息(可选)
+    "boat1_heading": 90.0,             // 船只1实际航向(度,0为正北)
+    "boat2_heading": 270.0             // 船只2实际航向(度,0为正北)
+  },
+  "timestamp": 1692691200              // 时间戳
+}
 ```
 
 ### 快速测试
 ```bash
-# 编译MPC客户端测试程序
-cd build && make mpc_client_test
+# 使用构建脚本编译项目
+./scripts/build.sh
 
-# 运行MPC客户端测试程序
-./mpc_client_test
+# 运行所有测试
+./scripts/run_tests.sh
 
-# 运行MPC测试脚本
+# MQTT功能演示
+./scripts/mqtt_demo.sh
+
+# 快速MQTT功能检查
+./scripts/mqtt_quick_check.sh
+
+# MPC客户端测试
 ./scripts/test_mpc_client.sh
 
-# 监听所有MPC和GCS消息
-mosquitto_sub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 -t "mpc/#" -t "gcs/#" -v
+# 监听所有MPC发布和GCS发布的消息
+mosquitto_sub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 -t "CollisionAlert" -t "SafetyStatus" -t "FleetCommand" -t "SystemStatus" -t "Heartbeat" -t "BoatState" -t "DockInfo" -t "RouteInfo" -t "Config" -v
 
-# 发布MPC测试消息
+# 发布测试消息（GCS发布船只状态）
 mosquitto_pub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 \
-  -t "mpc/BoatState" \
-  -m '{"sysid":1,"lat":30.5,"lng":114.3,"speed":2.5}'
+  -t "BoatState" \
+  -m '{"boat_id":1,"lat":30.55,"lng":114.34,"speed":2.5,"heading":90,"status":"ACTIVE","timestamp":'$(date +%s)'}'
 ```
 
 ## 输出数据
@@ -191,12 +245,57 @@ mosquitto_pub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 \
 ```
 boat_pro/
 ├── src/                    # 源代码
+│   ├── main.cpp           # 主程序入口
+│   ├── collision_detector.cpp
+│   ├── fleet_manager.cpp
+│   ├── mqtt_communicator.cpp
+│   ├── mqtt_interface.cpp
+│   ├── mqtt_message_handler.cpp
+│   ├── data_format_converter.cpp
+│   ├── udp_communicator.cpp
+│   ├── communication_protocol.cpp
+│   ├── geometry_utils.cpp
+│   └── types.cpp
 ├── include/                # 头文件
+│   ├── collision_detector.h
+│   ├── fleet_manager.h
+│   ├── mqtt_communicator.h
+│   ├── mqtt_interface.h
+│   ├── mqtt_message_handler.h
+│   ├── mqtt_topics.h
+│   ├── data_format_converter.h
+│   ├── udp_communicator.h
+│   ├── communication_protocol.h
+│   ├── geometry_utils.h
+│   ├── types.h
+│   └── boat_safety_system.h
 ├── config/                 # 配置文件
+│   ├── mqtt_config.json
+│   ├── system_config.json
+│   ├── communication_config.json
+│   └── mosquitto_custom.conf
 ├── examples/               # 示例程序
+│   ├── mqtt_example.cpp
+│   ├── mqtt_data_receiver.cpp
+│   ├── simple_mqtt_test.cpp
+│   ├── mqtt_client_test.cpp
+│   ├── simple_mqtt_connection_test.cpp
+│   ├── heartbeat_monitor.cpp
+│   └── mpc_client_test.cpp
 ├── tests/                  # 测试程序
+│   ├── test_collision_detector.cpp
+│   ├── test_communication.cpp
+│   └── test_mqtt.cpp
+├── scripts/                # 脚本工具
+│   ├── build.sh           # 构建脚本
+│   ├── run_tests.sh       # 测试运行脚本
+│   ├── mqtt_demo.sh       # MQTT演示脚本
+│   ├── mqtt_full_test.sh  # MQTT完整测试
+│   ├── mqtt_quick_check.sh # MQTT快速检查
+│   └── test_mpc_client.sh # MPC客户端测试
 ├── docs/                   # 文档目录
 ├── build/                  # 构建目录
+├── simulation/             # 仿真模块
 └── CMakeLists.txt         # 构建配置
 ```
 
@@ -214,6 +313,40 @@ boat_pro/
 
 ## 开发指南
 
+### 构建项目
+```bash
+# 使用构建脚本（推荐）
+./scripts/build.sh
+
+# 或手动构建
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+```
+
+### 运行测试
+```bash
+# 运行所有测试
+./scripts/run_tests.sh
+
+# 运行特定测试
+./build/test_collision_detector
+./build/test_communication
+./build/mqtt_test
+```
+
+### MQTT功能测试
+```bash
+# 快速检查MQTT功能
+./scripts/mqtt_quick_check.sh
+
+# 完整MQTT功能测试
+./scripts/mqtt_full_test.sh
+
+# MQTT实时通信演示
+./scripts/mqtt_demo.sh
+```
+
 ### API使用示例
 ```cpp
 #include "mqtt_communicator.h"
@@ -221,7 +354,10 @@ boat_pro/
 
 // 创建MQTT通信器
 MQTTConfig config;
-config.broker_host = "localhost";
+config.broker_host = "127.0.0.1";
+config.broker_port = 2000;
+config.username = "vEagles";
+config.password = "123456";
 MQTTCommunicator mqtt(config);
 
 // 设置回调
@@ -241,24 +377,61 @@ mqtt.publishBoatState(boat_state);
 - 支持移动应用接入
 - 可连接云平台服务
 
+## 脚本工具
+
+项目提供了一套完整的脚本工具，用于构建、测试和演示系统功能：
+
+### 核心脚本
+- **`build.sh`** - 主构建脚本，检查依赖并编译项目
+- **`run_tests.sh`** - 运行所有可用的测试程序
+
+### MQTT测试脚本
+- **`mqtt_demo.sh`** - MQTT实时通信演示，展示MPC和GCS双向通信
+- **`mqtt_full_test.sh`** - 完整的MQTT功能测试套件
+- **`mqtt_quick_check.sh`** - 快速MQTT功能验证
+- **`test_mpc_client.sh`** - MPC客户端专用测试脚本
+
+### 脚本特性
+- 所有脚本已配置正确的MQTT连接参数（端口2000，vEagles/123456认证）
+- 使用标准的MPC/GCS主题架构
+- 包含详细的状态输出和错误处理
+- 支持并发测试和实时监控
+
+### 使用建议
+1. 首次使用请运行 `./scripts/build.sh` 构建项目
+2. 使用 `./scripts/mqtt_quick_check.sh` 验证MQTT功能
+3. 运行 `./scripts/mqtt_demo.sh` 查看完整的通信演示
+4. 开发调试时使用 `./scripts/run_tests.sh` 运行单元测试
+
 ## 测试验证
 
 ### 单元测试
 ```bash
 # 运行所有测试
-make test
+./scripts/run_tests.sh
 
 # 运行特定测试
-./mqtt_test
+./build/test_collision_detector
+./build/test_communication
+./build/mqtt_test
 ```
 
 ### 集成测试
 ```bash
 # MQTT功能测试
-./simple_mqtt_test
+./scripts/mqtt_quick_check.sh
 
 # 完整系统测试
-./mqtt_example
+./scripts/mqtt_full_test.sh
+
+# MPC客户端测试
+./scripts/test_mpc_client.sh
+```
+
+### 实时通信演示
+```bash
+# MQTT实时通信演示
+./scripts/mqtt_demo.sh
 ```
 
 

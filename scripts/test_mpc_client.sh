@@ -27,19 +27,19 @@ CLIENT_ID="1000"
 
 # MPC订阅主题
 MPC_SUBSCRIBE_TOPICS=(
-    "mpc/BoatState"
-    "mpc/DockInfo"
-    "mpc/RouteInfo"
-    "mpc/Config"
+    "BoatState"
+    "DockInfo"
+    "RouteInfo"
+    "Config"
 )
 
 # MPC发布主题
 MPC_PUBLISH_TOPICS=(
-    "gcs/CollisionAlert"
-    "gcs/SafetyStatus"
-    "gcs/FleetCommand"
-    "gcs/SystemStatus"
-    "gcs/Heartbeat"
+    "CollisionAlert"
+    "SafetyStatus"
+    "FleetCommand"
+    "SystemStatus"
+    "Heartbeat"
 )
 
 echo "=== 测试MPC订阅主题 ==="
@@ -136,32 +136,30 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "${CLIE
 echo ""
 echo "=== 测试boat_pro系统发布到GCS主题 ==="
 
-# 模拟boat_pro系统发布碰撞告警到gcs/CollisionAlert
-echo "5. 模拟发布碰撞告警到 gcs/CollisionAlert"
-mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_gcs" \
-    -t "gcs/CollisionAlert" \
+# 模拟boat_pro系统发布碰撞告警到CollisionAlert
+echo "5. 模拟发布碰撞告警到 CollisionAlert"
+mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
+    -t "CollisionAlert" \
     -m '{
-        "current_boat_id": 1,
-        "level": 2,
-        "collision_time": 15.5,
+        "alert_level": 3,
+        "avoidance_decision": "立即减速并右转避让",
+        "alert_boat_id": 1,
         "collision_position": {
             "lat": 30.549832,
             "lng": 114.342922
         },
-        "front_boat_ids": [2],
-        "oncoming_boat_ids": [3],
-        "decision_advice": "MPC紧急避让",
-        "mpc_recommendation": {
-            "action": "emergency_brake",
-            "new_speed": 0.5,
-            "new_heading": 30.0
-        }
+        "collision_time": 15.5,
+        "oncoming_collision_info": {
+            "boat1_heading": 90.0,
+            "boat2_heading": 270.0
+        },
+        "timestamp": '$(date +%s)'
     }'
 
-# 模拟发布安全状态到gcs/SafetyStatus
-echo "6. 模拟发布安全状态到 gcs/SafetyStatus"
-mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_gcs" \
-    -t "gcs/SafetyStatus" \
+# 模拟发布安全状态到SafetyStatus
+echo "6. 模拟发布安全状态到 SafetyStatus"
+mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
+    -t "SafetyStatus" \
     -m '{
         "boat_id": 1,
         "status": "safe",
@@ -175,10 +173,10 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_p
         }
     }'
 
-# 模拟发布舰队命令到gcs/FleetCommand
-echo "7. 模拟发布舰队命令到 gcs/FleetCommand"
-mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_gcs" \
-    -t "gcs/FleetCommand" \
+# 模拟发布舰队命令到FleetCommand
+echo "7. 模拟发布舰队命令到 FleetCommand"
+mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
+    -t "FleetCommand" \
     -m '{
         "command": "formation_control",
         "target_boats": [1, 2, 3],
@@ -191,10 +189,10 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_p
         }
     }'
 
-# 模拟发布系统状态到gcs/SystemStatus
-echo "8. 模拟发布系统状态到 gcs/SystemStatus"
-mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_gcs" \
-    -t "gcs/SystemStatus" \
+# 模拟发布系统状态到SystemStatus
+echo "8. 模拟发布系统状态到 SystemStatus"
+mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
+    -t "SystemStatus" \
     -m '{
         "status": "running",
         "active_boats": 3,
@@ -208,10 +206,10 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_p
         }
     }'
 
-# 模拟发布心跳到gcs/Heartbeat
-echo "9. 模拟发布心跳到 gcs/Heartbeat"
-mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_gcs" \
-    -t "gcs/Heartbeat" \
+# 模拟发布心跳到Heartbeat
+echo "9. 模拟发布心跳到 Heartbeat"
+mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
+    -t "Heartbeat" \
     -m '{
         "boat_id": 1,
         "timestamp": 1692168000,
@@ -230,12 +228,12 @@ echo "注意: 实际测试需要MQTT代理在 $MQTT_HOST:$MQTT_PORT 运行"
 echo "并且支持用户名/密码认证: $MQTT_USER/$MQTT_PASS"
 echo ""
 echo "MPC主题总结:"
-echo "订阅主题 (MPC客户端订阅，GCS发布):"
-for topic in "${MPC_PUBLISH_TOPICS[@]}"; do
+echo "订阅主题 (MPC订阅，GCS发布):"
+for topic in "${MPC_SUBSCRIBE_TOPICS[@]}"; do
     echo "  - $topic"
 done
 echo ""
-echo "发布主题 (MPC客户端发布，GCS订阅):"
-for topic in "${MPC_SUBSCRIBE_TOPICS[@]}"; do
+echo "发布主题 (MPC发布，GCS订阅):"
+for topic in "${MPC_PUBLISH_TOPICS[@]}"; do
     echo "  - $topic"
 done

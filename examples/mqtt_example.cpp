@@ -147,7 +147,7 @@ int main() {
         boat_state["status"] = 2;
         boat_state["route_direction"] = 1;
         
-        mqtt_interface->publish(MqttTopics::getBoatStateTopic(1), boat_state);
+        mqtt_interface->publish(MqttTopics::BOAT_STATE, boat_state);
         std::cout << "Published test boat state data" << std::endl;
         
         std::this_thread::sleep_for(std::chrono::seconds(1));

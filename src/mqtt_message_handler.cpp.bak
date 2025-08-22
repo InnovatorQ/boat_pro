@@ -1,0 +1,203 @@
+#include "mqtt_message_handler.h"
+#include "mqtt_topics.h"
+#include <iostream>
+#include <jsoncpp/json/json.h>
+
+MqttMessageHandler::MqttMessageHandler(std::shared_ptr<MqttInterface> mqtt_interface)
+    : m_mqtt_interface(mqtt_interface) {
+    if (m_mqtt_interface) {
+        m_mqtt_interface->setMessageCallback([this](const std::string& topic, const std::string& payload) {
+            handleMessage(topic, payload);
+        });
+    }
+}
+
+MqttMessageHandler::~MqttMessageHandler() {
+    unsubscribeFromTopics();
+}
+
+void MqttMessageHandler::handleMessage(const std::string& topic, const std::string& payload) {
+    try {
+        Json::Value json_data;
+        Json::Reader reader;
+        
+        if (!reader.parse(payload, json_data)) {
+            std::cerr << "Failed to parse JSON payload for topic: " << topic << std::endl;
+            return;
+        }
+        
+        onMqttMessage(topic, json_data);
+    } catch (const std::exception& e) {
+        std::cerr << "Error handling message for topic " << topic << ": " << e.what() << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishCollisionAlert(const Json::Value& alert_data, int boat_id) {
+    std::string topic = MqttTopics::COLLISION_ALERT;
+    
+    if (!m_mqtt_interface->publish(topic, alert_data)) {
+        std::cerr << "Failed to publish collision alert to topic: " << topic << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishSafetyStatus(const Json::Value& status_data) {
+    if (!m_mqtt_interface->publish(MqttTopics::SAFETY_STATUS, status_data)) {
+        std::cerr << "Failed to publish safety status" << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishFleetCommand(const Json::Value& command_data) {
+    if (!m_mqtt_interface->publish(MqttTopics::FLEET_COMMAND, command_data)) {
+        std::cerr << "Failed to publish fleet command" << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishSystemStatus(const Json::Value& status_data) {
+    if (!m_mqtt_interface->publish(MqttTopics::SYSTEM_STATUS, status_data)) {
+        std::cerr << "Failed to publish system status" << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishHeartbeat(const Json::Value& heartbeat_data) {
+    if (!m_mqtt_interface->publish(MqttTopics::HEARTBEAT, heartbeat_data)) {
+        std::cerr << "Failed to publish heartbeat" << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishBoatState(const Json::Value& boat_data) {
+    if (!m_mqtt_interface->publish(MqttTopics::BOAT_STATE, boat_data)) {
+        std::cerr << "Failed to publish boat state" << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishDockInfo(const Json::Value& dock_data) {
+    if (!m_mqtt_interface->publish(MqttTopics::DOCK_INFO, dock_data)) {
+        std::cerr << "Failed to publish dock info" << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishRouteInfo(const Json::Value& route_data) {
+    if (!m_mqtt_interface->publish(MqttTopics::ROUTE_INFO, route_data)) {
+        std::cerr << "Failed to publish route info" << std::endl;
+    }
+}
+
+void MqttMessageHandler::publishConfig(const Json::Value& config_data) {
+    if (!m_mqtt_interface->publish(MqttTopics::CONFIG, config_data)) {
+        std::cerr << "Failed to publish config" << std::endl;
+    }
+}
+
+void MqttMessageHandler::onMqttMessage(const std::string& topic, const Json::Value& data) {
+    std::cout << "Received message on topic: " << topic << std::endl;
+    
+    if (topic == MqttTopics::BOAT_STATE) {
+        handleBoatStateMessage(data);
+    }
+    else if (topic == MqttTopics::DOCK_INFO) {
+        handleDockInfoMessage(data);
+    }
+    else if (topic == MqttTopics::ROUTE_INFO) {
+        handleRouteInfoMessage(data);
+    }
+    else if (topic == MqttTopics::CONFIG) {
+        handleConfigMessage(data);
+    }
+    else if (topic == MqttTopics::COLLISION_ALERT) {
+        handleCollisionAlertMessage(data);
+    }
+    else if (topic == MqttTopics::SAFETY_STATUS) {
+        handleSafetyStatusMessage(data);
+    }
+    else if (topic == MqttTopics::FLEET_COMMAND) {
+        handleFleetCommandMessage(data);
+    }
+    else if (topic == MqttTopics::SYSTEM_STATUS) {
+        handleSystemStatusMessage(data);
+    }
+    else if (topic == MqttTopics::HEARTBEAT) {
+        handleHeartbeatMessage(data);
+    }
+    else {
+        std::cout << "Unknown topic: " << topic << std::endl;
+    }
+}
+
+void MqttMessageHandler::handleBoatStateMessage(const Json::Value& data) {
+    std::cout << "Processing boat state message" << std::endl;
+    // 处理船只状态消息的逻辑
+}
+
+void MqttMessageHandler::handleDockInfoMessage(const Json::Value& data) {
+    std::cout << "Processing dock info message" << std::endl;
+    // 处理船坞信息消息的逻辑
+}
+
+void MqttMessageHandler::handleRouteInfoMessage(const Json::Value& data) {
+    std::cout << "Processing route info message" << std::endl;
+    // 处理航线信息消息的逻辑
+}
+
+void MqttMessageHandler::handleConfigMessage(const Json::Value& data) {
+    std::cout << "Processing config message" << std::endl;
+    // 处理配置消息的逻辑
+}
+
+void MqttMessageHandler::handleCollisionAlertMessage(const Json::Value& data) {
+    std::cout << "Processing collision alert message" << std::endl;
+    // 处理碰撞告警消息的逻辑
+}
+
+void MqttMessageHandler::handleSafetyStatusMessage(const Json::Value& data) {
+    std::cout << "Processing safety status message" << std::endl;
+    // 处理安全状态消息的逻辑
+}
+
+void MqttMessageHandler::handleFleetCommandMessage(const Json::Value& data) {
+    std::cout << "Processing fleet command message" << std::endl;
+    // 处理舰队命令消息的逻辑
+}
+
+void MqttMessageHandler::handleSystemStatusMessage(const Json::Value& data) {
+    std::cout << "Processing system status message" << std::endl;
+    // 处理系统状态消息的逻辑
+}
+
+void MqttMessageHandler::handleHeartbeatMessage(const Json::Value& data) {
+    std::cout << "Processing heartbeat message" << std::endl;
+    // 处理心跳消息的逻辑
+}
+
+void MqttMessageHandler::subscribeToTopics() {
+    std::cout << "Subscribing to MQTT topics..." << std::endl;
+    
+    // MPC订阅的主题 (GCS发布)
+    m_mqtt_interface->subscribe(MqttTopics::BOAT_STATE);
+    m_mqtt_interface->subscribe(MqttTopics::DOCK_INFO);
+    m_mqtt_interface->subscribe(MqttTopics::ROUTE_INFO);
+    m_mqtt_interface->subscribe(MqttTopics::CONFIG);
+    
+    // GCS订阅的主题 (MPC发布)
+    m_mqtt_interface->subscribe(MqttTopics::COLLISION_ALERT);
+    m_mqtt_interface->subscribe(MqttTopics::SAFETY_STATUS);
+    m_mqtt_interface->subscribe(MqttTopics::FLEET_COMMAND);
+    m_mqtt_interface->subscribe(MqttTopics::SYSTEM_STATUS);
+    m_mqtt_interface->subscribe(MqttTopics::HEARTBEAT);
+}
+
+void MqttMessageHandler::unsubscribeFromTopics() {
+    std::cout << "Unsubscribing from MQTT topics..." << std::endl;
+    
+    // MPC订阅的主题
+    m_mqtt_interface->unsubscribe(MqttTopics::BOAT_STATE);
+    m_mqtt_interface->unsubscribe(MqttTopics::DOCK_INFO);
+    m_mqtt_interface->unsubscribe(MqttTopics::ROUTE_INFO);
+    m_mqtt_interface->unsubscribe(MqttTopics::CONFIG);
+    
+    // GCS订阅的主题
+    m_mqtt_interface->unsubscribe(MqttTopics::COLLISION_ALERT);
+    m_mqtt_interface->unsubscribe(MqttTopics::SAFETY_STATUS);
+    m_mqtt_interface->unsubscribe(MqttTopics::FLEET_COMMAND);
+    m_mqtt_interface->unsubscribe(MqttTopics::SYSTEM_STATUS);
+    m_mqtt_interface->unsubscribe(MqttTopics::HEARTBEAT);
+}
