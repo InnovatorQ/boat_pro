@@ -1,136 +1,220 @@
 # 部署指南
 
-## 概述
-
-本文档提供了无人船作业安全预测系统的完整部署指南，包括环境准备、系统安装、配置设置和运行维护。
-
 ## 系统要求
 
+### 操作系统
+- **推荐**: Ubuntu 20.04 LTS 或更高版本
+- **支持**: Debian 10+ 或其他基于Debian的发行版
+- **架构**: x86_64 (AMD64)
+
 ### 硬件要求
+- **CPU**: 双核1GHz以上处理器
+- **内存**: 512MB以上可用内存
+- **存储**: 100MB可用磁盘空间
+- **网络**: 支持TCP/IP通信，稳定的网络连接
 
-#### 最低配置
-- **CPU**: 双核 2.0GHz
-- **内存**: 4GB RAM
-- **存储**: 10GB 可用空间
-- **网络**: 100Mbps 以太网
+### 软件依赖
 
-#### 推荐配置
-- **CPU**: 四核 3.0GHz
-- **内存**: 8GB RAM
-- **存储**: 50GB SSD
-- **网络**: 1Gbps 以太网
-
-### 软件要求
-
-#### 操作系统
-- **Ubuntu**: 18.04 LTS 或更高版本
-- **CentOS**: 7.0 或更高版本
-- **Debian**: 9.0 或更高版本
-
-#### 编译环境
-- **GCC**: 7.0+ (支持C++17)
-- **CMake**: 3.10+
-- **Make**: 4.0+
-
-#### 依赖库
-- **jsoncpp**: JSON处理库
-- **mosquitto**: MQTT客户端库
-- **pthread**: 多线程支持
-
-## 环境准备
-
-### Ubuntu/Debian 系统
-
+#### 必需依赖
 ```bash
-# 更新系统包
+# 构建工具
 sudo apt-get update
-sudo apt-get upgrade -y
+sudo apt-get install build-essential cmake
 
-# 安装编译工具
-sudo apt-get install -y build-essential cmake git
+# 核心库
+sudo apt-get install libjsoncpp-dev libmosquitto-dev
 
-# 安装依赖库
-sudo apt-get install -y libjsoncpp-dev libmosquitto-dev
-
-# 安装MQTT服务器
-sudo apt-get install -y mosquitto mosquitto-clients
-
-# 启动MQTT服务
-sudo systemctl start mosquitto
-sudo systemctl enable mosquitto
+# MQTT服务
+sudo apt-get install mosquitto mosquitto-clients
 ```
 
-### CentOS/RHEL 系统
-
+#### 可选依赖
 ```bash
-# 更新系统包
-sudo yum update -y
+# 开发工具
+sudo apt-get install git vim
 
-# 安装编译工具
-sudo yum groupinstall -y "Development Tools"
-sudo yum install -y cmake3 git
-
-# 安装EPEL仓库
-sudo yum install -y epel-release
-
-# 安装依赖库
-sudo yum install -y jsoncpp-devel libmosquitto-devel
-
-# 安装MQTT服务器
-sudo yum install -y mosquitto mosquitto-clients
-
-# 启动MQTT服务
-sudo systemctl start mosquitto
-sudo systemctl enable mosquitto
+# 调试工具
+sudo apt-get install gdb valgrind
 ```
 
-## 源码获取与编译
+## 快速部署
 
 ### 1. 获取源码
-
 ```bash
-# 克隆仓库
-git clone <repository-url> boat_pro
+git clone <repository-url>
+cd boat_pro
+```
+
+### 2. 一键构建
+```bash
+# 使用构建脚本（推荐）
+./scripts/build.sh
+
+# 或手动构建
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+```
+
+### 3. 配置MQTT服务
+```bash
+# 启动MQTT服务
+sudo systemctl start mosquitto
+sudo systemctl enable mosquitto
+
+# 验证服务状态
+sudo systemctl status mosquitto
+```
+
+### 4. 运行系统
+```bash
+cd build
+./boat_pro
+```
+
+## 详细部署步骤
+
+### 步骤1: 环境准备
+
+#### 1.1 系统更新
+```bash
+sudo apt-get update
+sudo apt-get upgrade -y
+```
+
+#### 1.2 安装构建工具
+```bash
+sudo apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    pkg-config
+```
+
+#### 1.3 安装核心依赖
+```bash
+# JsonCpp库 - JSON数据处理
+sudo apt-get install -y libjsoncpp-dev
+
+# Mosquitto库 - MQTT通信
+sudo apt-get install -y libmosquitto-dev
+
+# MQTT Broker和客户端工具
+sudo apt-get install -y mosquitto mosquitto-clients
+```
+
+### 步骤2: MQTT服务配置
+
+#### 2.1 配置MQTT Broker
+```bash
+# 创建配置文件
+sudo tee /etc/mosquitto/conf.d/boat_pro.conf << EOF
+# 监听端口
+port 2000
+
+# 允许匿名连接（生产环境建议使用认证）
+allow_anonymous false
+
+# 密码文件
+password_file /etc/mosquitto/passwd
+
+# 访问控制列表
+acl_file /etc/mosquitto/acl
+EOF
+```
+
+#### 2.2 创建用户认证
+```bash
+# 创建用户
+sudo mosquitto_passwd -c /etc/mosquitto/passwd vEagles
+
+# 设置密码为 123456
+# 输入密码时会提示输入
+```
+
+#### 2.3 配置访问控制
+```bash
+sudo tee /etc/mosquitto/acl << EOF
+# vEagles用户权限
+user vEagles
+topic readwrite mpc/#
+topic readwrite gcs/#
+EOF
+```
+
+#### 2.4 启动MQTT服务
+```bash
+# 重启服务以应用配置
+sudo systemctl restart mosquitto
+
+# 设置开机自启
+sudo systemctl enable mosquitto
+
+# 验证服务状态
+sudo systemctl status mosquitto
+```
+
+### 步骤3: 编译项目
+
+#### 3.1 获取源码
+```bash
+# 克隆项目（如果还没有）
+git clone <repository-url>
 cd boat_pro
 
-# 检查分支
-git branch -a
-git checkout main
+# 或更新现有代码
+git pull origin main
 ```
 
-### 2. 编译项目
-
+#### 3.2 构建项目
 ```bash
-# 创建构建目录
-mkdir build
+# 使用构建脚本（推荐）
+chmod +x scripts/build.sh
+./scripts/build.sh
+
+# 验证构建结果
+ls -la build/
+```
+
+#### 3.3 验证构建
+```bash
 cd build
 
-# 配置项目
-cmake ..
+# 检查主程序
+./boat_pro --version
 
-# 编译项目
-make -j$(nproc)
-
-# 检查编译结果
-ls -la
-```
-
-### 3. 验证编译
-
-```bash
 # 运行测试程序
-./simple_mqtt_test
-
-# 检查依赖库
-ldd boat_pro
+./collision_angle_test
+./avoidance_decision_test
 ```
 
-## 配置设置
+### 步骤4: 配置文件设置
 
-### 1. 系统配置
+#### 4.1 MQTT配置
+编辑 `config/mqtt_config.json`:
+```json
+{
+    "broker": {
+        "host": "127.0.0.1",
+        "port": 2000,
+        "username": "vEagles",
+        "password": "123456",
+        "client_id": "MPC_CLIENT_001"
+    },
+    "topics": {
+        "boat_state": "mpc/BoatState",
+        "dock_info": "mpc/DockInfo",
+        "route_info": "mpc/RouteInfo",
+        "config": "mpc/Config",
+        "collision_alert": "mpc/CollisionAlert",
+        "safety_status": "mpc/SafetyStatus",
+        "system_status": "mpc/SystemStatus"
+    }
+}
+```
 
-创建系统配置文件 `config/system_config.json`:
-
+#### 4.2 系统配置
+编辑 `config/system_config.json`:
 ```json
 {
     "boat": {
@@ -140,141 +224,71 @@ ldd boat_pro
     "emergency_threshold_s": 5,
     "warning_threshold_s": 30,
     "max_boats": 30,
-    "min_route_gap_m": 10,
-    "collision_detection": {
-        "update_interval_ms": 100,
-        "prediction_horizon_s": 60
-    },
-    "logging": {
-        "level": "INFO",
-        "file": "/var/log/boat_pro/system.log"
-    }
+    "min_route_gap_m": 10
 }
 ```
 
-### 2. MQTT配置
+### 步骤5: 系统测试
 
-配置MQTT连接 `config/mqtt_config.json`:
-
-```json
-{
-    "broker": {
-        "host": "127.0.0.1",
-        "port": 1883,
-        "username": "",
-        "password": "",
-        "keep_alive": 60,
-        "clean_session": true
-    },
-    "mpc_client": {
-        "client_id": "MPC_CLIENT_001",
-        "publish_topics": {
-            "boat_state": "mpc/boat_state/",
-            "collision_alert": "mpc/collision_alert/",
-            "safety_status": "mpc/safety_status/",
-            "system_status": "mpc/system_status",
-            "heartbeat": "mpc/heartbeat/"
-        },
-        "subscribe_topics": {
-            "mission_config": "gcs/mission_config",
-            "route_plan": "gcs/route_plan/+",
-            "safety_params": "gcs/safety_params",
-            "emergency_override": "gcs/emergency_override",
-            "system_command": "gcs/system_command"
-        }
-    },
-    "qos_settings": {
-        "boat_state": 0,
-        "collision_alert": 1,
-        "safety_status": 1,
-        "system_status": 1,
-        "mission_config": 2,
-        "emergency_override": 2
-    }
-}
-```
-
-### 3. MQTT服务器配置
-
-配置Mosquitto服务器 `/etc/mosquitto/conf.d/boat_pro.conf`:
-
-```conf
-# 监听端口
-listener 1883 0.0.0.0
-
-# 允许匿名连接（开发环境）
-allow_anonymous true
-
-# 日志配置
-log_dest file /var/log/mosquitto/mosquitto.log
-log_type error
-log_type warning
-log_type notice
-log_type information
-
-# 持久化配置
-persistence true
-persistence_location /var/lib/mosquitto/
-
-# 连接限制
-max_connections 1000
-max_inflight_messages 100
-max_queued_messages 1000
-
-# 消息大小限制
-message_size_limit 1048576
-```
-
-### 4. 生产环境安全配置
-
-生产环境MQTT安全配置:
-
-```conf
-# 禁用匿名连接
-allow_anonymous false
-
-# 密码文件
-password_file /etc/mosquitto/passwd
-
-# ACL访问控制
-acl_file /etc/mosquitto/acl
-
-# TLS加密
-listener 8883 0.0.0.0
-cafile /etc/mosquitto/ca.crt
-certfile /etc/mosquitto/server.crt
-keyfile /etc/mosquitto/server.key
-require_certificate false
-```
-
-创建用户和权限:
-
+#### 5.1 MQTT连接测试
 ```bash
-# 创建用户
-sudo mosquitto_passwd -c /etc/mosquitto/passwd mpc_user
-sudo mosquitto_passwd /etc/mosquitto/passwd gcs_user
+# 测试MQTT连接
+./scripts/mqtt_quick_check.sh
 
-# 配置ACL权限
-sudo tee /etc/mosquitto/acl << EOF
-# MPC用户权限
-user mpc_user
-topic write mpc/#
-topic read gcs/#
+# 完整MQTT功能测试
+./scripts/mqtt_full_test.sh
+```
 
-# GCS用户权限
-user gcs_user
-topic write gcs/#
-topic read mpc/#
+#### 5.2 功能测试
+```bash
+# 碰撞角度计算测试
+./scripts/test_collision_angle.sh
+
+# 运行所有测试
+./scripts/run_tests.sh
+```
+
+#### 5.3 实时通信演示
+```bash
+# MQTT实时通信演示
+./scripts/mqtt_demo.sh
+```
+
+## 生产环境部署
+
+### 安全配置
+
+#### 1. MQTT安全加强
+```bash
+# 禁用匿名连接
+sudo sed -i 's/allow_anonymous true/allow_anonymous false/' /etc/mosquitto/mosquitto.conf
+
+# 启用TLS加密（可选）
+sudo tee -a /etc/mosquitto/conf.d/boat_pro.conf << EOF
+# TLS配置
+cafile /etc/mosquitto/ca_certificates/ca.crt
+certfile /etc/mosquitto/certs/server.crt
+keyfile /etc/mosquitto/certs/server.key
+tls_version tlsv1.2
 EOF
 ```
 
-## 服务部署
+#### 2. 防火墙配置
+```bash
+# 开放MQTT端口
+sudo ufw allow 2000/tcp
 
-### 1. 创建系统服务
+# 限制SSH访问（可选）
+sudo ufw limit ssh
 
-创建systemd服务文件 `/etc/systemd/system/boat-pro.service`:
+# 启用防火墙
+sudo ufw enable
+```
 
-```ini
+#### 3. 系统服务配置
+```bash
+# 创建系统服务文件
+sudo tee /etc/systemd/system/boat-pro.service << EOF
 [Unit]
 Description=Boat Pro Safety Prediction System
 After=network.target mosquitto.service
@@ -284,113 +298,41 @@ Requires=mosquitto.service
 Type=simple
 User=boat-pro
 Group=boat-pro
-WorkingDirectory=/opt/boat_pro
-ExecStart=/opt/boat_pro/bin/boat_pro
-ExecReload=/bin/kill -HUP $MAINPID
+WorkingDirectory=/opt/boat-pro
+ExecStart=/opt/boat-pro/boat_pro
 Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-# 环境变量
-Environment=BOAT_PRO_CONFIG=/opt/boat_pro/config
-Environment=BOAT_PRO_LOG_LEVEL=INFO
-
-# 资源限制
-LimitNOFILE=65536
-LimitNPROC=32768
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-```
+EOF
 
-### 2. 创建用户和目录
-
-```bash
-# 创建系统用户
+# 创建专用用户
 sudo useradd -r -s /bin/false boat-pro
 
-# 创建目录结构
-sudo mkdir -p /opt/boat_pro/{bin,config,logs,data}
-sudo mkdir -p /var/log/boat_pro
+# 部署到系统目录
+sudo mkdir -p /opt/boat-pro
+sudo cp -r build/* /opt/boat-pro/
+sudo cp -r config /opt/boat-pro/
+sudo chown -R boat-pro:boat-pro /opt/boat-pro
 
-# 复制文件
-sudo cp build/boat_pro /opt/boat_pro/bin/
-sudo cp -r config/* /opt/boat_pro/config/
-sudo cp -r scripts /opt/boat_pro/
-
-# 设置权限
-sudo chown -R boat-pro:boat-pro /opt/boat_pro
-sudo chown -R boat-pro:boat-pro /var/log/boat_pro
-sudo chmod +x /opt/boat_pro/bin/boat_pro
-```
-
-### 3. 启动服务
-
-```bash
-# 重新加载systemd配置
+# 启用服务
 sudo systemctl daemon-reload
-
-# 启动服务
-sudo systemctl start boat-pro
-
-# 设置开机自启
-sudo systemctl enable boat-pro
-
-# 检查服务状态
-sudo systemctl status boat-pro
+sudo systemctl enable boat-pro.service
+sudo systemctl start boat-pro.service
 ```
 
-## 网络配置
+### 监控和日志
 
-### 1. 防火墙设置
-
+#### 1. 日志配置
 ```bash
-# Ubuntu/Debian (ufw)
-sudo ufw allow 1883/tcp comment "MQTT"
-sudo ufw allow 8883/tcp comment "MQTT TLS"
+# 创建日志目录
+sudo mkdir -p /var/log/boat-pro
+sudo chown boat-pro:boat-pro /var/log/boat-pro
 
-# CentOS/RHEL (firewalld)
-sudo firewall-cmd --permanent --add-port=1883/tcp
-sudo firewall-cmd --permanent --add-port=8883/tcp
-sudo firewall-cmd --reload
-```
-
-### 2. 网络优化
-
-配置网络参数 `/etc/sysctl.d/99-boat-pro.conf`:
-
-```conf
-# TCP优化
-net.core.rmem_max = 16777216
-net.core.wmem_max = 16777216
-net.ipv4.tcp_rmem = 4096 87380 16777216
-net.ipv4.tcp_wmem = 4096 65536 16777216
-
-# 连接数优化
-net.core.somaxconn = 65535
-net.ipv4.tcp_max_syn_backlog = 65535
-net.core.netdev_max_backlog = 5000
-
-# 时间等待优化
-net.ipv4.tcp_fin_timeout = 30
-net.ipv4.tcp_tw_reuse = 1
-```
-
-应用配置:
-
-```bash
-sudo sysctl -p /etc/sysctl.d/99-boat-pro.conf
-```
-
-## 监控和日志
-
-### 1. 日志配置
-
-配置logrotate `/etc/logrotate.d/boat-pro`:
-
-```conf
-/var/log/boat_pro/*.log {
+# 配置logrotate
+sudo tee /etc/logrotate.d/boat-pro << EOF
+/var/log/boat-pro/*.log {
     daily
     missingok
     rotate 30
@@ -398,236 +340,155 @@ sudo sysctl -p /etc/sysctl.d/99-boat-pro.conf
     delaycompress
     notifempty
     create 644 boat-pro boat-pro
-    postrotate
-        systemctl reload boat-pro
-    endscript
 }
-
-/var/log/mosquitto/*.log {
-    daily
-    missingok
-    rotate 30
-    compress
-    delaycompress
-    notifempty
-    create 644 mosquitto mosquitto
-    postrotate
-        systemctl reload mosquitto
-    endscript
-}
+EOF
 ```
 
-### 2. 监控脚本
-
-创建健康检查脚本 `/opt/boat_pro/scripts/health_check.sh`:
-
+#### 2. 系统监控
 ```bash
-#!/bin/bash
+# 查看服务状态
+sudo systemctl status boat-pro.service
 
-# 健康检查脚本
-LOG_FILE="/var/log/boat_pro/health_check.log"
-MQTT_HOST="127.0.0.1"
-MQTT_PORT="1883"
+# 查看实时日志
+sudo journalctl -u boat-pro.service -f
 
-echo "$(date): 开始健康检查" >> $LOG_FILE
-
-# 检查服务状态
-if ! systemctl is-active --quiet boat-pro; then
-    echo "$(date): ERROR - boat-pro服务未运行" >> $LOG_FILE
-    exit 1
-fi
-
-if ! systemctl is-active --quiet mosquitto; then
-    echo "$(date): ERROR - mosquitto服务未运行" >> $LOG_FILE
-    exit 1
-fi
-
-# 检查MQTT连接
-if ! timeout 5 mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -t "health/check" -m "$(date)" 2>/dev/null; then
-    echo "$(date): ERROR - MQTT连接失败" >> $LOG_FILE
-    exit 1
-fi
-
-# 检查进程资源
-CPU_USAGE=$(ps -o %cpu -p $(pgrep boat_pro) | tail -1 | tr -d ' ')
-MEM_USAGE=$(ps -o %mem -p $(pgrep boat_pro) | tail -1 | tr -d ' ')
-
-if (( $(echo "$CPU_USAGE > 80" | bc -l) )); then
-    echo "$(date): WARNING - CPU使用率过高: $CPU_USAGE%" >> $LOG_FILE
-fi
-
-if (( $(echo "$MEM_USAGE > 80" | bc -l) )); then
-    echo "$(date): WARNING - 内存使用率过高: $MEM_USAGE%" >> $LOG_FILE
-fi
-
-echo "$(date): 健康检查完成 - CPU: $CPU_USAGE%, MEM: $MEM_USAGE%" >> $LOG_FILE
-```
-
-设置定时任务:
-
-```bash
-# 添加到crontab
-sudo crontab -e
-
-# 每5分钟执行一次健康检查
-*/5 * * * * /opt/boat_pro/scripts/health_check.sh
-```
-
-## 测试验证
-
-### 1. 功能测试
-
-```bash
-# 进入项目目录
-cd /opt/boat_pro
-
-# 快速功能检查
-./scripts/mqtt_quick_check.sh
-
-# 完整功能测试
-./scripts/mqtt_full_test.sh
-
-# 实时通信演示
-./scripts/mqtt_demo.sh
-```
-
-### 2. 性能测试
-
-```bash
-# MQTT性能测试
-./scripts/mqtt_performance_test.sh
-
-# 系统负载测试
-./scripts/system_load_test.sh
-```
-
-### 3. 压力测试
-
-```bash
-# 并发连接测试
-for i in {1..100}; do
-    mosquitto_sub -h 127.0.0.1 -p 1883 -t "test/$i" -C 1 &
-done
-
-# 消息吞吐量测试
-for i in {1..1000}; do
-    mosquitto_pub -h 127.0.0.1 -p 1883 -t "test/performance" -m "message_$i"
-done
+# 查看MQTT服务状态
+sudo systemctl status mosquitto.service
 ```
 
 ## 故障排除
 
-### 1. 常见问题
+### 常见问题
 
-#### 服务启动失败
+#### 1. 编译错误
 ```bash
-# 检查服务状态
-sudo systemctl status boat-pro
+# 缺少依赖库
+sudo apt-get install libjsoncpp-dev libmosquitto-dev
 
-# 查看日志
-sudo journalctl -u boat-pro -f
+# CMake版本过低
+sudo apt-get install cmake
 
-# 检查配置文件
-sudo -u boat-pro /opt/boat_pro/bin/boat_pro --check-config
+# 权限问题
+chmod +x scripts/build.sh
 ```
 
-#### MQTT连接失败
+#### 2. MQTT连接问题
 ```bash
-# 检查MQTT服务
+# 检查MQTT服务状态
 sudo systemctl status mosquitto
 
-# 测试连接
-mosquitto_pub -h 127.0.0.1 -p 1883 -t "test" -m "hello"
+# 检查端口占用
+sudo netstat -tlnp | grep 2000
 
-# 查看MQTT日志
-sudo tail -f /var/log/mosquitto/mosquitto.log
+# 测试MQTT连接
+mosquitto_pub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 -t test -m "hello"
 ```
 
-#### 性能问题
+#### 3. 运行时错误
 ```bash
-# 检查系统资源
-top -p $(pgrep boat_pro)
-iostat -x 1
-netstat -i
+# 检查配置文件
+cat config/mqtt_config.json
+cat config/system_config.json
+
+# 检查权限
+ls -la build/boat_pro
+
+# 查看详细错误
+./build/boat_pro --verbose
+```
+
+### 性能优化
+
+#### 1. 系统调优
+```bash
+# 增加文件描述符限制
+echo "* soft nofile 65536" | sudo tee -a /etc/security/limits.conf
+echo "* hard nofile 65536" | sudo tee -a /etc/security/limits.conf
+
+# 优化网络参数
+echo "net.core.rmem_max = 16777216" | sudo tee -a /etc/sysctl.conf
+echo "net.core.wmem_max = 16777216" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+#### 2. MQTT优化
+```bash
+# 调整MQTT配置
+sudo tee -a /etc/mosquitto/conf.d/boat_pro.conf << EOF
+# 性能优化
+max_connections 1000
+max_inflight_messages 100
+max_queued_messages 1000
+message_size_limit 1048576
+EOF
+
+sudo systemctl restart mosquitto
+```
+
+## 维护指南
+
+### 定期维护
+
+#### 1. 系统更新
+```bash
+# 每月系统更新
+sudo apt-get update && sudo apt-get upgrade
+
+# 重启服务
+sudo systemctl restart boat-pro.service
+```
+
+#### 2. 日志清理
+```bash
+# 清理旧日志
+sudo find /var/log/boat-pro -name "*.log" -mtime +30 -delete
+
+# 清理系统日志
+sudo journalctl --vacuum-time=30d
+```
+
+#### 3. 性能监控
+```bash
+# 检查系统资源使用
+htop
+df -h
+free -h
 
 # 检查网络连接
-ss -tuln | grep 1883
+ss -tlnp | grep 2000
 ```
 
-### 2. 调试工具
+### 备份和恢复
 
+#### 1. 配置备份
 ```bash
-# 实时监控MQTT消息
-mosquitto_sub -h 127.0.0.1 -p 1883 -t "#" -v
-
-# 系统性能监控
-htop
-iotop
-nethogs
-
-# 网络连接监控
-watch -n 1 'ss -tuln | grep 1883'
-```
-
-## 升级和维护
-
-### 1. 系统升级
-
-```bash
-# 停止服务
-sudo systemctl stop boat-pro
-
-# 备份配置
-sudo cp -r /opt/boat_pro/config /opt/boat_pro/config.backup.$(date +%Y%m%d)
-
-# 更新代码
-cd /path/to/source
-git pull origin main
-
-# 重新编译
-cd build
-make clean
-make -j$(nproc)
-
-# 部署新版本
-sudo cp boat_pro /opt/boat_pro/bin/
-
-# 启动服务
-sudo systemctl start boat-pro
-```
-
-### 2. 配置更新
-
-```bash
-# 修改配置文件
-sudo nano /opt/boat_pro/config/system_config.json
-
-# 重新加载配置
-sudo systemctl reload boat-pro
-
-# 验证配置
-sudo systemctl status boat-pro
-```
-
-### 3. 数据备份
-
-```bash
-# 创建备份脚本
-#!/bin/bash
-BACKUP_DIR="/backup/boat_pro/$(date +%Y%m%d)"
-mkdir -p $BACKUP_DIR
-
 # 备份配置文件
-cp -r /opt/boat_pro/config $BACKUP_DIR/
-
-# 备份日志文件
-cp -r /var/log/boat_pro $BACKUP_DIR/
-
-# 备份数据文件
-cp -r /opt/boat_pro/data $BACKUP_DIR/
-
-# 压缩备份
-tar -czf $BACKUP_DIR.tar.gz $BACKUP_DIR
-rm -rf $BACKUP_DIR
+sudo tar -czf /backup/boat-pro-config-$(date +%Y%m%d).tar.gz \
+    /opt/boat-pro/config \
+    /etc/mosquitto/conf.d/boat_pro.conf \
+    /etc/mosquitto/passwd \
+    /etc/mosquitto/acl
 ```
 
+#### 2. 系统恢复
+```bash
+# 恢复配置
+sudo tar -xzf /backup/boat-pro-config-YYYYMMDD.tar.gz -C /
+
+# 重启服务
+sudo systemctl restart mosquitto.service
+sudo systemctl restart boat-pro.service
+```
+
+## 技术支持
+
+### 联系信息
+- **项目文档**: 参见 `docs/` 目录
+- **API参考**: `docs/API_REFERENCE.md`
+- **系统概述**: `docs/SYSTEM_OVERVIEW.md`
+
+### 调试工具
+- **构建脚本**: `./scripts/build.sh`
+- **测试脚本**: `./scripts/run_tests.sh`
+- **MQTT测试**: `./scripts/mqtt_quick_check.sh`
+- **角度测试**: `./scripts/test_collision_angle.sh`

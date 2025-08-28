@@ -27,19 +27,18 @@ CLIENT_ID="1000"
 
 # MPC订阅主题
 MPC_SUBSCRIBE_TOPICS=(
-    "BoatState"
-    "DockInfo"
-    "RouteInfo"
-    "Config"
+    "mpc/BoatState"
+    "mpc/DockInfo"
+    "mpc/RouteInfo"
+    "mpc/Config"
 )
 
 # MPC发布主题
 MPC_PUBLISH_TOPICS=(
-    "CollisionAlert"
-    "SafetyStatus"
-    "FleetCommand"
-    "SystemStatus"
-    "Heartbeat"
+    "mpc/CollisionAlert"
+    "mpc/SafetyStatus"
+    "mpc/"
+    "mpc/SystemStatus"
 )
 
 echo "=== 测试MPC订阅主题 ==="
@@ -136,10 +135,10 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "${CLIE
 echo ""
 echo "=== 测试boat_pro系统发布到GCS主题 ==="
 
-# 模拟boat_pro系统发布碰撞告警到CollisionAlert
-echo "5. 模拟发布碰撞告警到 CollisionAlert"
+# 模拟boat_pro系统发布碰撞告警到mpc/CollisionAlert
+echo "5. 模拟发布碰撞告警到 mpc/CollisionAlert"
 mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
-    -t "CollisionAlert" \
+    -t "mpc/CollisionAlert" \
     -m '{
         "alert_level": 3,
         "avoidance_decision": "立即减速并右转避让",
@@ -156,10 +155,10 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_p
         "timestamp": '$(date +%s)'
     }'
 
-# 模拟发布安全状态到SafetyStatus
-echo "6. 模拟发布安全状态到 SafetyStatus"
+# 模拟发布安全状态到mpc/SafetyStatus
+echo "6. 模拟发布安全状态到 mpc/SafetyStatus"
 mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
-    -t "SafetyStatus" \
+    -t "mpc/SafetyStatus" \
     -m '{
         "boat_id": 1,
         "status": "safe",
@@ -173,10 +172,10 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_p
         }
     }'
 
-# 模拟发布舰队命令到FleetCommand
-echo "7. 模拟发布舰队命令到 FleetCommand"
+# 模拟发布舰队命令到mpc/
+echo "7. 模拟发布舰队命令到 mpc/"
 mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
-    -t "FleetCommand" \
+    -t "mpc/" \
     -m '{
         "command": "formation_control",
         "target_boats": [1, 2, 3],
@@ -189,10 +188,10 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_p
         }
     }'
 
-# 模拟发布系统状态到SystemStatus
-echo "8. 模拟发布系统状态到 SystemStatus"
+# 模拟发布系统状态到mpc/SystemStatus
+echo "8. 模拟发布系统状态到 mpc/SystemStatus"
 mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
-    -t "SystemStatus" \
+    -t "mpc/SystemStatus" \
     -m '{
         "status": "running",
         "active_boats": 3,
@@ -203,21 +202,6 @@ mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_p
             "controllers_active": 3,
             "average_tracking_error": 0.15,
             "computation_load": 0.65
-        }
-    }'
-
-# 模拟发布心跳到Heartbeat
-echo "9. 模拟发布心跳到 Heartbeat"
-mosquitto_pub -h $MQTT_HOST -p $MQTT_PORT -u $MQTT_USER -P $MQTT_PASS -i "boat_pro_mpc" \
-    -t "Heartbeat" \
-    -m '{
-        "boat_id": 1,
-        "timestamp": 1692168000,
-        "status": "alive",
-        "sequence": 123,
-        "mpc_heartbeat": {
-            "controller_health": "good",
-            "last_control_update": 1692167999
         }
     }'
 

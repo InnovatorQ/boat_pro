@@ -45,21 +45,19 @@ struct MQTTConfig {
     
     // 主题配置
     struct Topics {
-        // 订阅主题
+        // 订阅主题 (MPC订阅，GCS发布)
         struct Subscribe {
-            std::string boat_state = "dock/BoatState";      // 无人船动态数据
-            std::string dock_info = "dock/DockInfo";        // 船坞静态数据
-            std::string route_info = "dock/RouteInfo";      // 船线定义数据
-            std::string system_config = "dock/Config";      // 系统配置文件
+            std::string boat_state = "mpc/BoatState";      // 无人船动态数据
+            std::string dock_info = "mpc/DockInfo";        // 船坞静态数据
+            std::string route_info = "mpc/RouteInfo";      // 船线定义数据
+            std::string system_config = "mpc/Config";      // 系统配置文件
         } subscribe;
         
-        // 发布主题
+        // 发布主题 (MPC发布，GCS订阅)
         struct Publish {
-            std::string collision_alert = "dock/CollisionAlert";   // 碰撞告警
-            std::string safety_status = "dock/SafetyStatus";       // 安全状态
-            std::string fleet_command = "dock/FleetCommand";       // 舰队命令
-            std::string system_status = "dock/SystemStatus";       // 系统状态
-            std::string heartbeat = "dock/Heartbeat";              // 心跳消息
+            std::string collision_alert = "mpc/CollisionAlert";   // 碰撞告警
+            std::string safety_status = "mpc/SafetyStatus";       // 安全状态
+            std::string system_status = "mpc/SystemStatus";       // 系统状态
         } publish;
     } topics;
     
@@ -177,9 +175,24 @@ public:
     bool publishSystemConfig(const SystemConfig& config);
     
     /**
-     * 发布心跳消息
+     * 发布安全状态
      */
-    bool publishHeartbeat(int boat_id);
+    bool publishSafetyStatus(const Json::Value& status);
+    
+    /**
+     * 发布系统状态
+     */
+    bool publishSystemStatus(const Json::Value& status);
+    
+    /**
+     * 启动定时发布线程
+     */
+    bool startPeriodicPublishing();
+    
+    /**
+     * 停止定时发布线程
+     */
+    void stopPeriodicPublishing();
     
     /**
      * 订阅所有相关主题
@@ -212,6 +225,12 @@ private:
     std::atomic<bool> connected_;
     std::atomic<bool> publishing_;
     std::thread publish_thread_;
+    
+    // 定时发布相关
+    std::atomic<bool> periodic_publishing_;
+    std::thread safety_status_thread_;
+    std::thread system_status_thread_;
+    
     mutable std::mutex stats_mutex_;
     mutable std::mutex message_queue_mutex_;
     std::condition_variable message_queue_cv_;
@@ -231,6 +250,16 @@ private:
      * 发布线程函数
      */
     void publishLoop();
+    
+    /**
+     * 定时发布SafetyStatus的循环
+     */
+    void safetyStatusPublishLoop();
+    
+    /**
+     * 定时发布SystemStatus的循环
+     */
+    void systemStatusPublishLoop();
     
     /**
      * 处理接收到的消息
@@ -257,8 +286,6 @@ private:
      */
     std::string generateBoatStateTopic(int boat_id) const;
     std::string generateCollisionAlertTopic(int boat_id) const;
-    std::string generateFleetCommandTopic(int boat_id) const;
-    std::string generateHeartbeatTopic(int boat_id) const;
     
     /**
      * MQTT回调函数（静态）

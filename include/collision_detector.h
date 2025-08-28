@@ -3,6 +3,7 @@
 #define BOAT_PRO_COLLISION_DETECTOR_H
 
 #include "types.h"
+#include "collision_decision_engine.h"
 #include <vector>
 #include <map>
 #include <memory>
@@ -43,6 +44,7 @@ private:
     std::map<int, BoatState> boat_states_;
     std::vector<DockInfo> dock_info_;
     std::vector<RouteInfo> route_info_;
+    std::unique_ptr<CollisionDecisionEngine> decision_engine_;
     
     /**
      * 检测出坞碰撞
@@ -70,9 +72,9 @@ private:
     AlertLevel calculateAlertLevel(double collision_time) const;
     
     /**
-     * 生成避碰决策建议
+     * 生成避碰决策建议（使用智能决策引擎）
      */
-    std::string generateDecisionAdvice(const CollisionAlert& alert) const;
+    AvoidanceDecision generateDecisionAdvice(const CollisionAlert& alert, const BoatState& current_boat) const;
     
     /**
      * 获取船只的碰撞半径
@@ -88,6 +90,11 @@ private:
      * 判断两船是否对向航行
      */
     bool isOncomingTraffic(const BoatState& boat1, const BoatState& boat2) const;
+    
+    /**
+     * 计算速度向量
+     */
+    GeoPoint calculateVelocityVector(double heading, double speed) const;
 };
 
 } // namespace boat_pro

@@ -74,7 +74,7 @@ void alertCallback(const CollisionAlert& alert) {
     std::cout << "预计碰撞时间: " << alert.collision_time << " 秒" << std::endl;
     std::cout << "碰撞位置: (" << alert.collision_position.lat << ", " 
               << alert.collision_position.lng << ")" << std::endl;
-    std::cout << "决策建议: " << alert.decision_advice << std::endl;
+    std::cout << "决策建议: " << alert.getDecisionDescription() << std::endl;
     std::cout << "================" << std::endl;
 }
 

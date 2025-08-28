@@ -1,0 +1,4 @@
+# ACL配置文件
+# 用户vEagles可以访问所有主题
+user vEagles
+topic readwrite #

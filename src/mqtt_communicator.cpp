@@ -4,6 +4,7 @@
 #include <jsoncpp/json/json.h>
 #include <iostream>
 #include <chrono>
+#include <thread>
 #include <sstream>
 #include <iomanip>
 
@@ -11,11 +12,12 @@ namespace boat_pro {
 namespace communication {
 
 MQTTCommunicator::MQTTCommunicator(const MQTTConfig& config)
-    : config_(config), mqtt_client_(nullptr), connected_(false), publishing_(false) {
+    : config_(config), mqtt_client_(nullptr), connected_(false), publishing_(false), periodic_publishing_(false) {
     initializeMosquitto();
 }
 
 MQTTCommunicator::~MQTTCommunicator() {
+    stopPeriodicPublishing();
     shutdown();
     cleanupMosquitto();
 }
@@ -253,18 +255,51 @@ bool MQTTCommunicator::publishSystemConfig(const SystemConfig& config) {
     return publish(config_.topics.subscribe.system_config, payload, MQTTQoS::AT_LEAST_ONCE, true); // 配置消息保留
 }
 
-bool MQTTCommunicator::publishHeartbeat(int boat_id) {
-    Json::Value json;
-    json["boat_id"] = boat_id;
-    json["timestamp"] = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    json["status"] = "alive";
-    
+bool MQTTCommunicator::publishSafetyStatus(const Json::Value& status) {
     Json::StreamWriterBuilder builder;
-    std::string payload = Json::writeString(builder, json);
+    std::string payload = Json::writeString(builder, status);
     
-    std::string topic = generateHeartbeatTopic(boat_id);
-    return publish(topic, payload, MQTTQoS::AT_MOST_ONCE, false);
+    return publish(config_.topics.publish.safety_status, payload, MQTTQoS::AT_LEAST_ONCE, false);
+}
+
+bool MQTTCommunicator::publishSystemStatus(const Json::Value& status) {
+    Json::StreamWriterBuilder builder;
+    std::string payload = Json::writeString(builder, status);
+    
+    return publish(config_.topics.publish.system_status, payload, MQTTQoS::AT_LEAST_ONCE, false);
+}
+
+bool MQTTCommunicator::startPeriodicPublishing() {
+    if (periodic_publishing_) {
+        return true;
+    }
+    
+    periodic_publishing_ = true;
+    
+    // 启动SafetyStatus定时发布线程 (1Hz)
+    safety_status_thread_ = std::thread(&MQTTCommunicator::safetyStatusPublishLoop, this);
+    
+    // 启动SystemStatus定时发布线程 (1Hz)
+    system_status_thread_ = std::thread(&MQTTCommunicator::systemStatusPublishLoop, this);
+    
+    std::cout << "Started periodic publishing: SafetyStatus and SystemStatus at 1Hz" << std::endl;
+    return true;
+}
+
+void MQTTCommunicator::stopPeriodicPublishing() {
+    if (periodic_publishing_) {
+        periodic_publishing_ = false;
+        
+        if (safety_status_thread_.joinable()) {
+            safety_status_thread_.join();
+        }
+        
+        if (system_status_thread_.joinable()) {
+            system_status_thread_.join();
+        }
+        
+        std::cout << "Stopped periodic publishing" << std::endl;
+    }
 }
 
 bool MQTTCommunicator::subscribeAllTopics() {
@@ -432,14 +467,6 @@ std::string MQTTCommunicator::generateCollisionAlertTopic(int boat_id) const {
     return config_.topics.publish.collision_alert;
 }
 
-std::string MQTTCommunicator::generateFleetCommandTopic(int boat_id) const {
-    return config_.topics.publish.fleet_command;
-}
-
-std::string MQTTCommunicator::generateHeartbeatTopic(int boat_id) const {
-    return config_.topics.publish.heartbeat;
-}
-
 // 静态回调函数实现
 void MQTTCommunicator::onConnect(void* context, int result) {
     auto* comm = static_cast<MQTTCommunicator*>(context);
@@ -525,6 +552,64 @@ void MQTTCommunicator::cleanupMosquitto() {
         mqtt_client_ = nullptr;
     }
     mosquitto_lib_cleanup();
+}
+
+void MQTTCommunicator::safetyStatusPublishLoop() {
+    std::cout << "SafetyStatus publish loop started at 1Hz" << std::endl;
+    
+    while (periodic_publishing_ && connected_) {
+        // 创建SafetyStatus消息
+        Json::Value safety_status;
+        safety_status["timestamp"] = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        safety_status["status"] = "monitoring";
+        safety_status["active_boats"] = 0;  // 可以从fleet_manager获取实际数据
+        safety_status["alert_level"] = "normal";
+        safety_status["last_collision_check"] = safety_status["timestamp"];
+        
+        // 发布SafetyStatus
+        if (!publishSafetyStatus(safety_status)) {
+            std::cerr << "Failed to publish SafetyStatus" << std::endl;
+        }
+        
+        // 等待1秒 (1Hz频率)
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    
+    std::cout << "SafetyStatus publish loop stopped" << std::endl;
+}
+
+void MQTTCommunicator::systemStatusPublishLoop() {
+    std::cout << "SystemStatus publish loop started at 1Hz" << std::endl;
+    
+    while (periodic_publishing_ && connected_) {
+        // 创建SystemStatus消息
+        Json::Value system_status;
+        system_status["timestamp"] = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        system_status["status"] = "running";
+        system_status["version"] = "1.0.0";
+        system_status["uptime"] = system_status["timestamp"];  // 简化的运行时间
+        system_status["memory_usage"] = "normal";
+        system_status["cpu_usage"] = "normal";
+        system_status["mqtt_connected"] = connected_.load();
+        
+        // 获取统计信息
+        auto stats = getStatistics();
+        system_status["messages_published"] = static_cast<Json::UInt64>(stats.messages_published);
+        system_status["messages_received"] = static_cast<Json::UInt64>(stats.messages_received);
+        system_status["connection_errors"] = static_cast<Json::UInt64>(stats.connection_lost_count);
+        
+        // 发布SystemStatus
+        if (!publishSystemStatus(system_status)) {
+            std::cerr << "Failed to publish SystemStatus" << std::endl;
+        }
+        
+        // 等待1秒 (1Hz频率)
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    
+    std::cout << "SystemStatus publish loop stopped" << std::endl;
 }
 
 } // namespace communication

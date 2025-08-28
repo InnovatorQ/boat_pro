@@ -155,7 +155,7 @@ void FleetManager::runSafetyMonitoring() {
                     // 默认输出告警信息
                     std::cout << "碰撞告警 - 船只ID: " << alert.current_boat_id 
                               << ", 等级: " << static_cast<int>(alert.level)
-                              << ", 建议: " << alert.decision_advice << std::endl;
+                              << ", 建议: " << alert.getDecisionDescription() << std::endl;
                 }
             }
             

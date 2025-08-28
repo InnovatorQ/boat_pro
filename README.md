@@ -3,7 +3,11 @@
 
 ## 系统概述
 
-无人船作业安全预测系统是一个专为无人船集群设计的智能安全管理系统，提供实时碰撞预测、安全告警和智能决策支持。系统采用先进的MQTT通信架构，支持MPC（模型预测控制）与GCS（地面控制站）之间的双向实时通信。
+无人船作业安全预测系统是一个专为无人船集群设计的智能安全预测系统，专注于提供实时碰撞预测、安全告警和避碰决策建议。系统采用先进的MQTT通信架构，MPC（模型预测控制）专门负责安全预测分析，向GCS（地面控制站）输出预测结果。
+
+**系统职责定位**：
+- **MPC**: 专注于安全预测和告警，不发送管理命令
+- **输出内容**: 严格按照需求文档的拟输出数据规范
 
 ## 核心功能
 
@@ -22,6 +26,16 @@
 - **紧急级别**: 碰撞距离 < 速度×5秒，预留5秒停船时间
 - **警告级别**: 碰撞距离 < 速度×30秒，预留30秒反应时间
 - **正常级别**: 碰撞距离 > 速度×30秒，安全状态
+
+### 4. 碰撞角度分析
+- **角度计算**: 基于两船航向线夹角，自动计算0-180°范围内的碰撞角度
+- **类型分类**: 根据碰撞角度自动分类碰撞类型
+  - **追尾碰撞** (0-30°): 后船追前船场景
+  - **斜向碰撞** (30-60°): 两船斜向相遇
+  - **交叉碰撞** (60-120°): 两船垂直或近垂直交叉
+  - **斜向对撞** (120-150°): 两船大角度相向而行
+  - **正面对撞** (150-180°): 两船正面相向
+- **决策优化**: 基于碰撞角度和船只优先级生成精确的避让建议
 
 ### 4. 通信接口
 - **UDP通信**: 支持Drone ID和NMEA 2000协议
@@ -97,43 +111,41 @@ make
 
 #### MPC订阅主题 (GCS → MPC)
 ```
-BoatState     # 船只状态数据
-DockInfo      # 船坞信息数据  
-RouteInfo     # 航线信息数据
-Config        # 系统配置数据
+mpc/BoatState     # 船只状态数据
+mpc/DockInfo      # 船坞信息数据  
+mpc/RouteInfo     # 航线信息数据
+mpc/Config        # 系统配置数据
 ```
 
 #### MPC发布主题 (MPC → GCS)
 ```
-CollisionAlert    # 碰撞告警信息
-SafetyStatus      # 安全状态
-FleetCommand      # 舰队命令
-SystemStatus      # 系统状态
-Heartbeat         # 心跳信息
+mpc/CollisionAlert    # 碰撞告警信息
+mpc/SafetyStatus      # 安全状态
+mpc/SystemStatus      # 系统状态
 ```
 
 #### GCS订阅主题 (MPC → GCS)
 ```
-CollisionAlert    # 碰撞告警信息，包含：
-                  # - alert_level: 碰撞紧急程度 (1=正常, 2=警告, 3=紧急)
-                  # - avoidance_decision: 相应避碰决策建议
-                  # - alert_boat_id: 告警船只ID
-                  # - collision_position: 预计发生碰撞的位置(经纬度)
-                  # - collision_time: 预计碰撞时间(秒)
-                  # - oncoming_collision_info: 对向碰撞时两船实际航向(度,0为正北)
-SafetyStatus      # 安全状态
-FleetCommand      # 舰队命令
-SystemStatus      # 系统状态
-Heartbeat         # 心跳信息
+mpc/CollisionAlert    # 碰撞告警信息，包含：
+                      # - alert_level: 碰撞紧急程度 (1=正常, 2=警告, 3=紧急)
+                      # - avoidance_decision: 相应避碰决策建议
+                      # - alert_boat_id: 告警船只ID
+                      # - collision_position: 预计发生碰撞的位置(经纬度)
+                      # - collision_time: 预计碰撞时间(秒)
+                      # - oncoming_collision_info: 对向碰撞时两船实际航向(度,0为正北)
+mpc/SafetyStatus      # 安全状态
+mpc/SystemStatus      # 系统状态
 ```
 
 #### GCS发布主题 (GCS → MPC)
 ```
-BoatState     # 船只状态数据
-DockInfo      # 船坞信息数据
-RouteInfo     # 航线信息数据
-Config        # 系统配置数据
+mpc/BoatState     # 船只状态数据
+mpc/DockInfo      # 船坞信息数据
+mpc/RouteInfo     # 航线信息数据
+mpc/Config        # 系统配置数据
 ```
+
+**主题前缀说明**: 使用`mpc/`前缀区分MPC应用与系统中其他MQTT应用，确保主题命名空间的清晰分离。
 
 ### 碰撞告警消息格式
 
@@ -175,11 +187,11 @@ CollisionAlert主题的消息格式包含以下字段：
 ./scripts/test_mpc_client.sh
 
 # 监听所有MPC发布和GCS发布的消息
-mosquitto_sub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 -t "CollisionAlert" -t "SafetyStatus" -t "FleetCommand" -t "SystemStatus" -t "Heartbeat" -t "BoatState" -t "DockInfo" -t "RouteInfo" -t "Config" -v
+mosquitto_sub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 -t "mpc/CollisionAlert" -t "mpc/SafetyStatus" -t "mpc/SystemStatus" -t "mpc/BoatState" -t "mpc/DockInfo" -t "mpc/RouteInfo" -t "mpc/Config" -v
 
 # 发布测试消息（GCS发布船只状态）
 mosquitto_pub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 \
-  -t "BoatState" \
+  -t "mpc/BoatState" \
   -m '{"boat_id":1,"lat":30.55,"lng":114.34,"speed":2.5,"heading":90,"status":"ACTIVE","timestamp":'$(date +%s)'}'
 ```
 
@@ -188,24 +200,33 @@ mosquitto_pub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 \
 ### 1. 碰撞告警信息
 - **紧急程度**: 3级告警等级（正常/警告/紧急）
 - **船只标识**: 当前船ID、前向船ID、对向船ID
+- **碰撞角度**: 两船航向线夹角（0-180°）
+- **碰撞类型**: 基于角度的碰撞分类（追尾/斜向/交叉/斜向对撞/正面对撞）
 - **位置信息**: 预计碰撞位置（WGS84坐标）
 - **时间预测**: 预计碰撞时间（秒）
 - **航向信息**: 对向碰撞时的双方航向
-- **决策建议**: 避碰决策建议
+- **决策建议**: 避碰决策建议（枚举代码）
 
 ### 2. 数据示例
 ```json
 {
+  "alert_level": 2,
+  "avoidance_decision": 23,
   "current_boat_id": 1,
-  "level": 2,
+  "collision_angle": 90.0,
+  "collision_type": "crossing",
   "collision_time": 15.5,
   "collision_position": {
     "lat": 30.549832,
     "lng": 114.342922
   },
-  "front_boat_ids": [2],
-  "oncoming_boat_ids": [3, 4],
-  "decision_advice": "减速避让"
+  "front_collision_boat_id": null,
+  "oncoming_collision_boat_ids": [2, 3],
+  "oncoming_collision_info": {
+    "current_boat_heading": 45.0,
+    "oncoming_boats_heading": [135.0, 140.0]
+  },
+  "timestamp": 1692691200
 }
 ```
 
@@ -244,59 +265,48 @@ mosquitto_pub -h 127.0.0.1 -p 2000 -u vEagles -P 123456 \
 
 ```
 boat_pro/
-├── src/                    # 源代码
+├── src/                    # 核心源代码
 │   ├── main.cpp           # 主程序入口
-│   ├── collision_detector.cpp
-│   ├── fleet_manager.cpp
-│   ├── mqtt_communicator.cpp
-│   ├── mqtt_interface.cpp
-│   ├── mqtt_message_handler.cpp
-│   ├── data_format_converter.cpp
-│   ├── udp_communicator.cpp
-│   ├── communication_protocol.cpp
-│   ├── geometry_utils.cpp
-│   └── types.cpp
+│   ├── collision_detector.cpp      # 碰撞检测算法
+│   ├── fleet_manager.cpp           # 舰队管理协调
+│   ├── mqtt_communicator.cpp       # MQTT通信接口
+│   ├── avoidance_decision_types.cpp # 避碰决策枚举
+│   ├── types.cpp                   # 数据类型定义
+│   └── geometry_utils.cpp          # 地理计算工具
 ├── include/                # 头文件
 │   ├── collision_detector.h
 │   ├── fleet_manager.h
 │   ├── mqtt_communicator.h
-│   ├── mqtt_interface.h
-│   ├── mqtt_message_handler.h
-│   ├── mqtt_topics.h
-│   ├── data_format_converter.h
-│   ├── udp_communicator.h
-│   ├── communication_protocol.h
-│   ├── geometry_utils.h
+│   ├── avoidance_decision_types.h
 │   ├── types.h
-│   └── boat_safety_system.h
+│   └── geometry_utils.h
+├── examples/               # 功能演示程序
+│   ├── mqtt_example.cpp           # MQTT通信演示
+│   ├── collision_angle_test.cpp   # 碰撞角度计算测试
+│   └── avoidance_decision_test.cpp # 避碰决策枚举测试
+├── tests/                  # 核心测试程序
+│   ├── test_collision_detector.cpp # 碰撞检测测试
+│   ├── test_communication.cpp     # 通信功能测试
+│   └── test_mqtt.cpp              # MQTT功能测试
+├── scripts/                # 工具脚本
+│   ├── build.sh                   # 构建脚本
+│   ├── run_tests.sh               # 测试运行脚本
+│   ├── mqtt_demo.sh               # MQTT演示脚本
+│   ├── mqtt_quick_check.sh        # MQTT快速检查
+│   └── test_collision_angle.sh    # 碰撞角度测试
 ├── config/                 # 配置文件
-│   ├── mqtt_config.json
-│   ├── system_config.json
-│   ├── communication_config.json
-│   └── mosquitto_custom.conf
-├── examples/               # 示例程序
-│   ├── mqtt_example.cpp
-│   ├── mqtt_data_receiver.cpp
-│   ├── simple_mqtt_test.cpp
-│   ├── mqtt_client_test.cpp
-│   ├── simple_mqtt_connection_test.cpp
-│   ├── heartbeat_monitor.cpp
-│   └── mpc_client_test.cpp
-├── tests/                  # 测试程序
-│   ├── test_collision_detector.cpp
-│   ├── test_communication.cpp
-│   └── test_mqtt.cpp
-├── scripts/                # 脚本工具
-│   ├── build.sh           # 构建脚本
-│   ├── run_tests.sh       # 测试运行脚本
-│   ├── mqtt_demo.sh       # MQTT演示脚本
-│   ├── mqtt_full_test.sh  # MQTT完整测试
-│   ├── mqtt_quick_check.sh # MQTT快速检查
-│   └── test_mpc_client.sh # MPC客户端测试
-├── docs/                   # 文档目录
-├── build/                  # 构建目录
-├── simulation/             # 仿真模块
-└── CMakeLists.txt         # 构建配置
+│   ├── mqtt_config.json          # MQTT配置
+│   ├── system_config.json        # 系统配置
+│   └── mosquitto_custom.conf     # MQTT服务配置
+├── docs/                   # 核心文档
+│   ├── SYSTEM_OVERVIEW.md         # 系统概述
+│   ├── API_REFERENCE.md           # API参考
+│   ├── MQTT_ARCHITECTURE.md       # MQTT架构
+│   └── DEPLOYMENT_GUIDE.md        # 部署指南
+├── build/                  # 构建目录（自动生成）
+├── MQTT_TOPICS_DEFINITION.md      # MQTT主题定义
+├── README.md                       # 项目说明
+└── CMakeLists.txt                  # 构建配置
 ```
 
 ## 文档目录
@@ -390,6 +400,7 @@ mqtt.publishBoatState(boat_state);
 - **`mqtt_full_test.sh`** - 完整的MQTT功能测试套件
 - **`mqtt_quick_check.sh`** - 快速MQTT功能验证
 - **`test_mpc_client.sh`** - MPC客户端专用测试脚本
+- **`test_collision_angle.sh`** - 碰撞角度计算功能测试
 
 ### 脚本特性
 - 所有脚本已配置正确的MQTT连接参数（端口2000，vEagles/123456认证）

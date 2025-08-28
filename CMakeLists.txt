@@ -56,40 +56,41 @@ target_link_libraries(test_collision_detector boat_pro_lib ${JSONCPP_LIBRARIES} 
 add_executable(test_communication tests/test_communication.cpp)
 target_link_libraries(test_communication boat_pro_lib ${JSONCPP_LIBRARIES} Threads::Threads)
 
-# 创建MQTT示例程序
-add_executable(mqtt_example examples/mqtt_example.cpp)
-target_link_libraries(mqtt_example boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
+# 创建碰撞决策测试程序
+add_executable(test_collision_decision tests/test_collision_decision.cpp)
+target_link_libraries(test_collision_decision boat_pro_lib ${JSONCPP_LIBRARIES} Threads::Threads)
 
-# 创建MQTT数据接收器程序
-add_executable(mqtt_data_receiver examples/mqtt_data_receiver.cpp)
-target_link_libraries(mqtt_data_receiver boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
+# 创建简化碰撞测试程序
+add_executable(test_simple_collision tests/test_simple_collision.cpp)
+target_link_libraries(test_simple_collision boat_pro_lib ${JSONCPP_LIBRARIES} Threads::Threads)
 
-# 创建简单MQTT测试程序
-add_executable(simple_mqtt_test examples/simple_mqtt_test.cpp)
-target_link_libraries(simple_mqtt_test boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
+# 创建90度碰撞测试程序
+add_executable(test_90degree_collision tests/test_90degree_collision.cpp)
+target_link_libraries(test_90degree_collision boat_pro_lib ${JSONCPP_LIBRARIES} Threads::Threads)
 
-# 创建MQTT测试程序
+# 创建主程序
+add_executable(boat_pro src/main.cpp)
+target_link_libraries(boat_pro boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
+
+# 创建核心测试程序
+add_executable(test_collision_detector tests/test_collision_detector.cpp)
+target_link_libraries(test_collision_detector boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
+
+add_executable(test_communication tests/test_communication.cpp)
+target_link_libraries(test_communication boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
+
 add_executable(mqtt_test tests/test_mqtt.cpp)
 target_link_libraries(mqtt_test boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
 
-# 创建MQTT客户端配置测试程序
-add_executable(mqtt_client_test examples/mqtt_client_test.cpp)
-target_link_libraries(mqtt_client_test boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
+# 创建功能演示程序
+add_executable(mqtt_example examples/mqtt_example.cpp)
+target_link_libraries(mqtt_example boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
 
-# 创建简单MQTT连接测试程序
-add_executable(simple_mqtt_connection_test examples/simple_mqtt_connection_test.cpp)
-target_link_libraries(simple_mqtt_connection_test boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
+add_executable(collision_angle_test examples/collision_angle_test.cpp)
+target_link_libraries(collision_angle_test boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
 
-# 创建心跳监控程序
-add_executable(heartbeat_monitor examples/heartbeat_monitor.cpp)
-target_link_libraries(heartbeat_monitor boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
-
-# 创建MPC客户端测试程序
-add_executable(mpc_client_test examples/mpc_client_test.cpp)
-target_link_libraries(mpc_client_test boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
-
-# 添加仿真器
-add_subdirectory(simulation)
+add_executable(avoidance_decision_test examples/avoidance_decision_test.cpp)
+target_link_libraries(avoidance_decision_test boat_pro_lib ${JSONCPP_LIBRARIES} ${MOSQUITTO_LIB} Threads::Threads)
 
 # 安装规则
 install(TARGETS boat_pro_lib

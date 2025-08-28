@@ -58,9 +58,7 @@ MQTTConfig loadMQTTConfig(const std::string& config_file) {
             const auto& pub = topics["publish"];
             config.topics.publish.collision_alert = pub.get("collision_alert", "dock/CollisionAlert").asString();
             config.topics.publish.safety_status = pub.get("safety_status", "dock/SafetyStatus").asString();
-            config.topics.publish.fleet_command = pub.get("fleet_command", "dock/FleetCommand").asString();
             config.topics.publish.system_status = pub.get("system_status", "dock/SystemStatus").asString();
-            config.topics.publish.heartbeat = pub.get("heartbeat", "dock/Heartbeat").asString();
         }
     }
     
@@ -194,17 +192,6 @@ int main() {
         std::cout << "发布系统配置成功" << std::endl;
     } else {
         std::cout << "发布系统配置失败" << std::endl;
-    }
-    
-    // 测试心跳消息
-    std::cout << "\n--- 测试心跳消息 ---" << std::endl;
-    for (int i = 1; i <= 3; i++) {
-        if (mqtt.publishHeartbeat(i)) {
-            std::cout << "发布船只 " << i << " 心跳成功" << std::endl;
-        } else {
-            std::cout << "发布船只 " << i << " 心跳失败" << std::endl;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     
     // 持续运行一段时间以接收消息

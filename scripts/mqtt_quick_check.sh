@@ -82,19 +82,19 @@ rm -f /tmp/mqtt_quick_test.txt
 
 # 测试MPC主题
 echo -e "${YELLOW}5. 测试MPC主题发布...${NC}"
-if mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD -t 'mpc/boat_state/test' -m '{"boat_id":"test","status":"ok"}' 2>/dev/null; then
+if mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD -t 'mpc/BoatState' -m '{"boat_id":"test","status":"ok"}' 2>/dev/null; then
     echo -e "${GREEN}✓ MPC主题发布正常${NC}"
 else
     echo -e "${RED}✗ MPC主题发布失败${NC}"
     exit 1
 fi
 
-# 测试GCS主题
-echo -e "${YELLOW}6. 测试GCS主题发布...${NC}"
+# 测试其他应用主题（非MPC）
+echo -e "${YELLOW}6. 测试其他应用主题发布...${NC}"
 if mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD -t 'gcs/mission_config' -m '{"mission":"test"}' 2>/dev/null; then
-    echo -e "${GREEN}✓ GCS主题发布正常${NC}"
+    echo -e "${GREEN}✓ 其他应用主题发布正常${NC}"
 else
-    echo -e "${RED}✗ GCS主题发布失败${NC}"
+    echo -e "${RED}✗ 其他应用主题发布失败${NC}"
     exit 1
 fi
 

@@ -80,22 +80,33 @@ double calculateCollisionTime(const GeoPoint& pos1, const GeoPoint& vel1,
                              const GeoPoint& pos2, const GeoPoint& vel2,
                              double radius) {
     // 将地理坐标转换为局部笛卡尔坐标系进行计算
-    // 这里简化处理，假设在小范围内可以近似为平面坐标
+    // 计算两船之间的相对位置 (米)
+    double dx = calculateDistance(GeoPoint(pos1.lat, pos1.lng), GeoPoint(pos1.lat, pos2.lng));
+    if (pos2.lng < pos1.lng) dx = -dx;
     
-    double dx = (pos2.lng - pos1.lng) * EARTH_RADIUS * std::cos(toRadians(pos1.lat)) / 180.0 * M_PI;
-    double dy = (pos2.lat - pos1.lat) * EARTH_RADIUS / 180.0 * M_PI;
+    double dy = calculateDistance(GeoPoint(pos1.lat, pos1.lng), GeoPoint(pos2.lat, pos1.lng));
+    if (pos2.lat < pos1.lat) dy = -dy;
     
-    double dvx = (vel2.lng - vel1.lng) * EARTH_RADIUS * std::cos(toRadians(pos1.lat)) / 180.0 * M_PI;
-    double dvy = (vel2.lat - vel1.lat) * EARTH_RADIUS / 180.0 * M_PI;
+    // vel1和vel2应该是速度向量，这里假设它们已经是笛卡尔坐标系下的速度分量
+    // 如果传入的是基于航向和速度的向量，需要转换
+    double dvx = vel2.lng - vel1.lng;  // 相对速度x分量
+    double dvy = vel2.lat - vel1.lat;  // 相对速度y分量
     
     // 求解二次方程: |p1 + v1*t - p2 - v2*t|^2 = radius^2
+    // 简化为: |relative_pos + relative_vel*t|^2 = radius^2
     double a = dvx * dvx + dvy * dvy;
     double b = 2 * (dx * dvx + dy * dvy);
     double c = dx * dx + dy * dy - radius * radius;
     
+    // 如果相对速度为0，检查当前距离
+    if (a < 1e-6) {
+        if (c <= 0) return 0; // 已经在碰撞范围内
+        return -1; // 静止状态，不会碰撞
+    }
+    
     double discriminant = b * b - 4 * a * c;
     
-    if (discriminant < 0 || a == 0) {
+    if (discriminant < 0) {
         return -1; // 无碰撞
     }
     
@@ -103,10 +114,10 @@ double calculateCollisionTime(const GeoPoint& pos1, const GeoPoint& vel1,
     double t2 = (-b + std::sqrt(discriminant)) / (2 * a);
     
     // 返回最小的正值时间
-    if (t1 > 0) return t1;
-    if (t2 > 0) return t2;
+    if (t1 > 0.1) return t1;  // 至少0.1秒后
+    if (t2 > 0.1) return t2;
     
-    return -1; // 无碰撞
+    return -1; // 无有效碰撞时间
 }
 
 } // namespace geometry

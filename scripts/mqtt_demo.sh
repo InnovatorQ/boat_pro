@@ -35,28 +35,21 @@ trap cleanup SIGINT SIGTERM
 echo -e "${GREEN}🖥️  启动GCS监控中心（监听MPC数据）...${NC}"
 {
     echo -e "${GREEN}[GCS监控] 等待MPC数据...${NC}"
-    mosquitto_sub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD -t "mpc/#" -v | while read line; do
+    mosquitto_sub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD -t "mpc/CollisionAlert" -t "mpc/SafetyStatus" -t "mpc/" -t "mpc/SystemStatus" -v | while read line; do
         topic=$(echo $line | cut -d' ' -f1)
         message=$(echo $line | cut -d' ' -f2-)
         case $topic in
-            mpc/boat_state/*)
-                boat_id=$(echo $topic | cut -d'/' -f3)
-                echo -e "${GREEN}[GCS监控] 📍 收到船只${boat_id}状态: $message${NC}"
+            mpc/CollisionAlert)
+                echo -e "${RED}[GCS监控] ⚠️  收到碰撞告警: $message${NC}"
                 ;;
-            mpc/collision_alert/*)
-                boat_id=$(echo $topic | cut -d'/' -f3)
-                echo -e "${RED}[GCS监控] ⚠️  收到船只${boat_id}碰撞告警: $message${NC}"
+            mpc/SafetyStatus)
+                echo -e "${YELLOW}[GCS监控] 🛡️  收到安全状态: $message${NC}"
                 ;;
-            mpc/safety_status/*)
-                boat_id=$(echo $topic | cut -d'/' -f3)
-                echo -e "${YELLOW}[GCS监控] 🛡️  收到船只${boat_id}安全状态: $message${NC}"
+            mpc/)
+                echo -e "${BLUE}[GCS监控] 🚢 收到舰队命令: $message${NC}"
                 ;;
-            mpc/system_status)
+            mpc/SystemStatus)
                 echo -e "${BLUE}[GCS监控] 🖥️  收到MPC系统状态: $message${NC}"
-                ;;
-            mpc/heartbeat/*)
-                boat_id=$(echo $topic | cut -d'/' -f3)
-                echo -e "${CYAN}[GCS监控] 💓 收到船只${boat_id}心跳: $message${NC}"
                 ;;
             *)
                 echo -e "${PURPLE}[GCS监控] 📨 收到其他消息 [$topic]: $message${NC}"
@@ -72,25 +65,21 @@ sleep 1
 echo -e "${BLUE}🚢 启动MPC执行单元（监听GCS指令）...${NC}"
 {
     echo -e "${BLUE}[MPC执行] 等待GCS指令...${NC}"
-    mosquitto_sub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD -t "gcs/#" -v | while read line; do
+    mosquitto_sub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD -t "mpc/BoatState" -t "mpc/DockInfo" -t "mpc/RouteInfo" -t "mpc/Config" -v | while read line; do
         topic=$(echo $line | cut -d' ' -f1)
         message=$(echo $line | cut -d' ' -f2-)
         case $topic in
-            gcs/mission_config)
-                echo -e "${BLUE}[MPC执行] 📋 收到任务配置: $message${NC}"
+            mpc/BoatState)
+                echo -e "${BLUE}[MPC执行] 📍 收到船只状态: $message${NC}"
                 ;;
-            gcs/route_plan/*)
-                route_id=$(echo $topic | cut -d'/' -f3)
-                echo -e "${BLUE}[MPC执行] 🗺️  收到航线规划${route_id}: $message${NC}"
+            mpc/DockInfo)
+                echo -e "${BLUE}[MPC执行] 🏠 收到船坞信息: $message${NC}"
                 ;;
-            gcs/safety_params)
-                echo -e "${YELLOW}[MPC执行] ⚙️  收到安全参数: $message${NC}"
+            mpc/RouteInfo)
+                echo -e "${BLUE}[MPC执行] 🗺️  收到航线信息: $message${NC}"
                 ;;
-            gcs/emergency_override)
-                echo -e "${RED}[MPC执行] 🚨 收到紧急接管指令: $message${NC}"
-                ;;
-            gcs/heartbeat)
-                echo -e "${CYAN}[MPC执行] 💓 收到GCS心跳: $message${NC}"
+            mpc/Config)
+                echo -e "${YELLOW}[MPC执行] ⚙️  收到系统配置: $message${NC}"
                 ;;
             *)
                 echo -e "${PURPLE}[MPC执行] 📨 收到其他指令 [$topic]: $message${NC}"
@@ -108,73 +97,58 @@ echo
 # 1. MPC启动并发布系统状态
 echo -e "${BLUE}1. MPC系统启动${NC}"
 mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
-    -t "mpc/system_status" \
+    -t "mpc/SystemStatus" \
     -m '{"system_id":"MPC_001","status":"OPERATIONAL","active_boats":3,"timestamp":'$(date +%s)'}'
 
 sleep 2
 
-# 2. GCS发布任务配置
-echo -e "${GREEN}2. GCS下发任务配置${NC}"
+# 2. GCS发布船只状态
+echo -e "${GREEN}2. GCS下发船只状态数据${NC}"
 mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
-    -t "gcs/mission_config" \
-    -m '{"mission_id":"DEMO_001","boat_count":3,"formation_type":"LINE","max_speed":3.0}'
+    -t "mpc/BoatState" \
+    -m '{"boat_id":1,"lat":30.55,"lng":114.34,"speed":2.5,"heading":90,"status":"ACTIVE","timestamp":'$(date +%s)'}'
 
 sleep 2
 
-# 3. MPC发布船只状态
-echo -e "${BLUE}3. MPC上报船只状态${NC}"
-for boat_id in 1 2 3; do
-    lat=$(echo "30.55 + $boat_id * 0.001" | bc)
-    lng=$(echo "114.34 + $boat_id * 0.001" | bc)
-    mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
-        -t "mpc/boat_state/$boat_id" \
-        -m "{\"boat_id\":$boat_id,\"lat\":$lat,\"lng\":$lng,\"speed\":2.5,\"heading\":90,\"timestamp\":$(date +%s)}"
-    sleep 0.5
-done
+# 3. GCS发布航线信息
+echo -e "${GREEN}3. GCS下发航线信息${NC}"
+mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
+    -t "mpc/RouteInfo" \
+    -m '{"route_id":"ROUTE_001","waypoints":[{"lat":30.55,"lng":114.34},{"lat":30.56,"lng":114.35}],"max_speed":3.0}'
 
 sleep 2
 
 # 4. MPC发布碰撞告警
 echo -e "${RED}4. MPC发布碰撞告警${NC}"
 mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
-    -t "mpc/collision_alert/1" \
-    -m '{"boat_id":1,"alert_level":2,"collision_time":15.5,"involved_boats":[2],"avoidance_action":"减速避让","timestamp":'$(date +%s)'}'
+    -t "mpc/CollisionAlert" \
+    -m '{"alert_level":2,"avoidance_decision":"减速避让","alert_boat_id":1,"collision_position":{"lat":30.55,"lng":114.34},"collision_time":15.5,"timestamp":'$(date +%s)'}'
 
 sleep 2
 
-# 5. GCS发布紧急接管
-echo -e "${RED}5. GCS发布紧急接管指令${NC}"
+# 5. MPC发布安全状态
+echo -e "${YELLOW}5. MPC发布安全状态${NC}"
 mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
-    -t "gcs/emergency_override" \
-    -m '{"override_id":"EMERGENCY_001","boat_ids":[1,2],"action":"STOP_ALL","reason":"碰撞风险","operator":"DEMO_OPERATOR","timestamp":'$(date +%s)'}'
+    -t "mpc/SafetyStatus" \
+    -m '{"fleet_status":"WARNING","active_boats":3,"collision_risks":1,"emergency_stops":0,"timestamp":'$(date +%s)'}'
 
 sleep 2
 
-# 6. 持续心跳演示
-echo -e "${CYAN}6. 心跳监控演示（10秒）${NC}"
-for i in {1..10}; do
-    # MPC心跳
-    mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
-        -t "mpc/heartbeat/1" \
-        -m "{\"boat_id\":1,\"status\":\"ACTIVE\",\"timestamp\":$(date +%s)}"
-    
-    # GCS心跳
-    mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
-        -t "gcs/heartbeat" \
-        -m "{\"gcs_id\":\"GCS_001\",\"status\":\"ONLINE\",\"timestamp\":$(date +%s)}"
-    
-    sleep 1
-done
+# 6. GCS发布系统配置
+echo -e "${GREEN}6. GCS下发系统配置${NC}"
+mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
+    -t "mpc/Config" \
+    -m '{"emergency_threshold_s":5,"warning_threshold_s":30,"max_boats":30,"min_route_gap_m":10}'
 
 echo
 echo -e "${GREEN}=== 演示完成 ===${NC}"
 echo -e "${YELLOW}演示了以下通信流程:${NC}"
 echo "1. MPC系统启动状态上报"
-echo "2. GCS任务配置下发"
-echo "3. MPC船只状态实时上报"
+echo "2. GCS船只状态数据下发"
+echo "3. GCS航线信息下发"
 echo "4. MPC碰撞告警上报"
-echo "5. GCS紧急接管指令下发"
-echo "6. 双向心跳监控"
+echo "5. MPC安全状态上报"
+echo "6. GCS系统配置下发"
 echo
 echo -e "${BLUE}按 Ctrl+C 退出演示${NC}"
 
@@ -188,6 +162,6 @@ while true; do
     speed=$(echo "2.0 + $RANDOM % 20 * 0.1" | bc)
     
     mosquitto_pub -h $BROKER_HOST -p $BROKER_PORT -u $USERNAME -P $PASSWORD \
-        -t "mpc/boat_state/$boat_id" \
+        -t "mpc/BoatState" \
         -m "{\"boat_id\":$boat_id,\"lat\":$lat,\"lng\":$lng,\"speed\":$speed,\"heading\":90,\"timestamp\":$(date +%s)}" &
 done

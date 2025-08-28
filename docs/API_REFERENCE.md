@@ -1,543 +1,418 @@
-# API接口文档
+# API 参考文档
 
-## 概述
+## 核心数据类型
 
-本文档描述了无人船作业安全预测系统的核心API接口，包括C++类接口和MQTT消息接口。
+### CollisionAlert - 碰撞告警信息
 
-## C++ API接口
+碰撞告警的核心数据结构，包含完整的碰撞预测信息。
 
-### 核心类
+```cpp
+struct CollisionAlert {
+    AlertLevel level;              // 紧急程度 (NORMAL/WARNING/EMERGENCY)
+    int current_boat_id;           // 当前船ID
+    double collision_angle;        // 碰撞角度 (度，0-180°范围)
+    CollisionType collision_type;  // 碰撞类型
+    std::vector<int> front_boat_ids;    // 前向被碰撞船ID列表
+    std::vector<int> oncoming_boat_ids; // 对向被碰撞船ID列表
+    GeoPoint collision_position;   // 预计碰撞位置
+    double collision_time;         // 预计碰撞时间(秒)
+    double current_heading;        // 当前船航向
+    double other_heading;          // 对方船航向
+    AvoidanceDecision avoidance_decision; // 避碰决策枚举
+    
+    // 静态方法
+    static double calculateCollisionAngle(double heading1, double heading2);
+    static CollisionType determineCollisionType(double angle);
+    static std::string collisionTypeToString(CollisionType type);
+    
+    // 实例方法
+    Json::Value toJson() const;
+    int getDecisionCode() const;
+    void setDecisionCode(int code);
+    std::string getDecisionDescription() const;
+};
+```
 
-#### CollisionDetector
-碰撞检测核心类
+### CollisionType - 碰撞类型枚举
+
+基于碰撞角度的碰撞类型分类。
+
+```cpp
+enum class CollisionType {
+    OVERTAKING,      // 追尾碰撞 (0-30°)
+    OBLIQUE,         // 斜向碰撞 (30-60°)
+    CROSSING,        // 交叉碰撞 (60-120°)
+    OBLIQUE_HEAD_ON, // 斜向对撞 (120-150°)
+    HEAD_ON          // 正面对撞 (150-180°)
+};
+```
+
+### BoatState - 船只状态信息
+
+实时船只动态数据，适配C# mqtt_mpc_BoatState。
+
+```cpp
+struct BoatState {
+    int sysid;                    // 船只系统ID
+    double timestamp;             // 时间戳（UTC或本机时间，单位：秒）
+    double lat;                   // 纬度（WGS84）
+    double lng;                   // 经度（WGS84）
+    double heading;               // 航向角（0°为正北，顺时针增加）
+    double speed;                 // 船速，单位：米/秒
+    BoatStatus status;            // 航行状态（1-出坞，2-正常航行，3-入坞）
+    
+    Json::Value toJson() const;
+    static BoatState fromJson(const Json::Value& json);
+    void loadFromJson(const Json::Value& json);
+    GeoPoint getPosition() const;
+};
+```
+
+### BoatStatus - 船只状态枚举
+
+船只航行状态定义，影响优先级判断。
+
+```cpp
+enum class BoatStatus : int {
+    UNDOCKING = 1,    // 出坞 (最低优先级)
+    NORMAL_SAIL = 2,  // 正常航行 (中等优先级)
+    DOCKING = 3       // 入坞 (最高优先级)
+};
+```
+
+### DockInfo - 船坞信息
+
+船坞静态位置数据，适配C# mqtt_mpc_DockInfo。
+
+```cpp
+struct DockInfo {
+    int dock_id;                  // 船坞ID（与停靠boat sysid相同）
+    double lat;                   // 纬度（WGS84）
+    double lng;                   // 经度（WGS84）
+    
+    Json::Value toJson() const;
+    static DockInfo fromJson(const Json::Value& json);
+    GeoPoint getPosition() const;
+};
+```
+
+### RouteInfo - 航线信息
+
+船只规划航线数据，适配C# mqtt_mpc_RouteInfo。
+
+```cpp
+struct RouteInfo {
+    int sysid;                    // 船只ID
+    std::vector<GeoPoint> points; // 航线点列表（最多500个点）
+    
+    Json::Value toJson() const;
+    static RouteInfo fromJson(const Json::Value& json);
+};
+```
+
+### SystemConfig - 系统配置
+
+系统配置参数，适配C# mqtt_mpc_SystemConfiguration。
+
+```cpp
+struct SystemConfig {
+    BoatDimensions boat;          // 船只尺寸信息
+    int emergency_threshold_s;    // 紧急判断时间阈值（秒）
+    int warning_threshold_s;      // 警告判断时间阈值（秒）
+    int max_boats;                // 最大船只数量
+    int min_route_gap_m;          // 最小航线横向间距（米）
+    
+    Json::Value toJson() const;
+    static SystemConfig fromJson(const Json::Value& json);
+    void loadFromJson(const Json::Value& json);
+    static SystemConfig getDefault();
+};
+```
+
+## 核心类接口
+
+### CollisionDetector - 碰撞检测器
+
+负责各类型碰撞的检测和分析。
 
 ```cpp
 class CollisionDetector {
 public:
-    // 构造函数
     CollisionDetector(const SystemConfig& config);
     
-    // 更新船只状态
-    void updateBoatState(const BoatState& boat);
+    // 主要接口
+    std::vector<CollisionAlert> detectCollisions();
+    void updateBoatStates(const std::map<int, BoatState>& states);
+    void updateDockInfo(const std::map<int, DockInfo>& docks);
+    void updateRouteInfo(const std::map<int, RouteInfo>& routes);
     
-    // 检测碰撞风险
-    CollisionAlert detectCollision(int boat_id);
+    // 专项检测
+    std::vector<CollisionAlert> detectUndockingCollisions();
+    std::vector<CollisionAlert> detectDockingCollisions();
+    std::vector<CollisionAlert> detectFollowingCollisions();
+    std::vector<CollisionAlert> detectOncomingCollisions();
     
-    // 获取安全状态
-    SafetyStatus getSafetyStatus(int boat_id);
-    
-    // 设置安全参数
-    void setSafetyParams(const SafetyParams& params);
+private:
+    AlertLevel calculateAlertLevel(double collision_time) const;
+    AvoidanceDecision generateDecisionAdvice(const CollisionAlert& alert, 
+                                           const BoatState& current_boat) const;
+    bool isOncomingTraffic(const BoatState& boat1, const BoatState& boat2) const;
+    double getCollisionRadius() const;
 };
 ```
 
-#### FleetManager
-船队管理类
+### MQTTCommunicator - MQTT通信器
 
-```cpp
-class FleetManager {
-public:
-    // 构造函数
-    FleetManager(const SystemConfig& config);
-    
-    // 添加船只
-    bool addBoat(const BoatInfo& boat);
-    
-    // 移除船只
-    bool removeBoat(int boat_id);
-    
-    // 获取船只列表
-    std::vector<BoatInfo> getBoatList();
-    
-    // 更新任务配置
-    void updateMissionConfig(const MissionConfig& config);
-    
-    // 获取船队状态
-    FleetStatus getFleetStatus();
-};
-```
-
-#### MQTTCommunicator
-MQTT通信类
+处理与GCS的MQTT通信。
 
 ```cpp
 class MQTTCommunicator {
 public:
-    // 构造函数
     MQTTCommunicator(const MQTTConfig& config);
     
-    // 初始化连接
+    // 连接管理
     bool initialize();
-    
-    // 连接到代理
     bool connect();
-    
-    // 断开连接
     void disconnect();
+    bool isConnected() const;
     
-    // 发布消息
-    bool publish(const std::string& topic, const std::string& message, int qos = 0);
-    
-    // 订阅主题
-    bool subscribe(const std::string& topic, int qos = 1);
-    
-    // 设置消息回调
-    void setMessageCallback(std::function<void(const std::string&, const std::string&)> callback);
-    
-    // 发布船只状态
-    bool publishBoatState(const BoatState& boat);
-    
-    // 发布碰撞告警
+    // 发布接口 (MPC → GCS)
     bool publishCollisionAlert(const CollisionAlert& alert);
+    bool publishSafetyStatus(const Json::Value& status);
+    bool publishSystemStatus(const Json::Value& status);
     
-    // 发布安全状态
-    bool publishSafetyStatus(const SafetyStatus& status);
+    // 订阅回调设置 (GCS → MPC)
+    void setBoatStateCallback(std::function<void(const BoatState&)> callback);
+    void setDockInfoCallback(std::function<void(const DockInfo&)> callback);
+    void setRouteInfoCallback(std::function<void(const RouteInfo&)> callback);
+    void setConfigCallback(std::function<void(const SystemConfig&)> callback);
     
-    // 发布系统状态
-    bool publishSystemStatus(const SystemStatus& status);
+    // 主题管理
+    std::string generateCollisionAlertTopic(int boat_id) const;
+    
+private:
+    void onMessage(const std::string& topic, const std::string& payload);
+    void handleBoatStateMessage(const std::string& payload);
+    void handleDockInfoMessage(const std::string& payload);
+    void handleRouteInfoMessage(const std::string& payload);
+    void handleConfigMessage(const std::string& payload);
 };
 ```
 
-### 数据结构
+### FleetManager - 舰队管理器
 
-#### BoatState
-船只状态结构
+协调整个无人船集群的安全预测。
 
 ```cpp
-struct BoatState {
-    int boat_id;                    // 船只ID
-    double lat;                     // 纬度
-    double lng;                     // 经度
-    double speed;                   // 速度 (m/s)
-    double heading;                 // 航向 (度)
-    int battery;                    // 电池电量 (%)
-    std::string status;             // 状态 ("ACTIVE", "IDLE", "ERROR")
-    uint64_t timestamp;             // 时间戳
+class FleetManager {
+public:
+    FleetManager(const SystemConfig& config);
     
-    // JSON序列化
-    std::string toJson() const;
-    static BoatState fromJson(const std::string& json);
+    // 主要接口
+    void updateBoatState(const BoatState& boat);
+    void updateDockInfo(const DockInfo& dock);
+    void updateRouteInfo(const RouteInfo& route);
+    void updateSystemConfig(const SystemConfig& config);
+    
+    std::vector<CollisionAlert> performSafetyCheck();
+    Json::Value generateSafetyStatus() const;
+    Json::Value generateSystemStatus() const;
+    
+    // 状态查询
+    std::map<int, BoatState> getActiveBoats() const;
+    int getActiveBoatCount() const;
+    AlertLevel getOverallAlertLevel() const;
+    
+private:
+    void cleanupInactiveBoats();
+    bool isBoatActive(const BoatState& boat) const;
+    void updateLastActivity(int boat_id);
 };
 ```
 
-#### CollisionAlert
-碰撞告警结构
+## 工具类接口
+
+### GeometryUtils - 地理计算工具
+
+提供地理坐标和几何计算功能。
 
 ```cpp
-struct CollisionAlert {
-    int boat_id;                    // 船只ID
-    int alert_level;                // 告警级别 (0:正常, 1:警告, 2:紧急)
-    double collision_time;          // 预计碰撞时间 (秒)
-    Position collision_position;    // 预计碰撞位置
-    std::vector<int> involved_boats; // 涉及的其他船只
-    std::string avoidance_action;   // 避障动作
-    uint64_t timestamp;             // 时间戳
+namespace geometry {
+    // 距离计算
+    double calculateDistance(const GeoPoint& p1, const GeoPoint& p2);
+    double calculateBearing(const GeoPoint& from, const GeoPoint& to);
     
-    // JSON序列化
-    std::string toJson() const;
-    static CollisionAlert fromJson(const std::string& json);
-};
+    // 碰撞预测
+    double calculateCollisionTime(const GeoPoint& pos1, const GeoPoint& vel1,
+                                const GeoPoint& pos2, const GeoPoint& vel2,
+                                double collision_radius);
+    
+    GeoPoint calculateDestination(const GeoPoint& start, double bearing, 
+                                double distance);
+    
+    // 航线计算
+    double calculateDistanceToRoute(const GeoPoint& point, 
+                                  const std::vector<GeoPoint>& route);
+    
+    GeoPoint findNearestPointOnRoute(const GeoPoint& point,
+                                   const std::vector<GeoPoint>& route);
+}
 ```
 
-#### SafetyStatus
-安全状态结构
+### AvoidanceDecisionMapper - 避碰决策映射
+
+避碰决策枚举与描述的转换工具。
 
 ```cpp
-struct SafetyStatus {
-    int boat_id;                    // 船只ID
-    std::string safety_level;       // 安全级别 ("SAFE", "WARNING", "DANGER")
-    std::vector<std::string> risk_factors; // 风险因素
-    std::string operational_status; // 运行状态
-    uint64_t last_check;           // 最后检查时间
+class AvoidanceDecisionMapper {
+public:
+    static std::string getChineseDescription(AvoidanceDecision decision);
+    static std::string getEnglishDescription(AvoidanceDecision decision);
+    static AvoidanceDecision fromCode(int code);
+    static int toCode(AvoidanceDecision decision);
     
-    // JSON序列化
-    std::string toJson() const;
-    static SafetyStatus fromJson(const std::string& json);
+    // 决策分类
+    static bool isEmergencyDecision(AvoidanceDecision decision);
+    static bool isPriorityDecision(AvoidanceDecision decision);
+    static bool isAngleBasedDecision(AvoidanceDecision decision);
 };
-```
-
-#### MissionConfig
-任务配置结构
-
-```cpp
-struct MissionConfig {
-    std::string mission_id;         // 任务ID
-    int boat_count;                 // 船只数量
-    std::string formation_type;     // 编队类型
-    double safety_distance;         // 安全距离 (米)
-    double max_speed;              // 最大速度 (m/s)
-    OperationArea operation_area;   // 作业区域
-    uint64_t timestamp;            // 时间戳
-    
-    // JSON序列化
-    std::string toJson() const;
-    static MissionConfig fromJson(const std::string& json);
-};
-```
-
-#### SystemConfig
-系统配置结构
-
-```cpp
-struct SystemConfig {
-    struct Boat {
-        double length;              // 船长 (米)
-        double width;              // 船宽 (米)
-    } boat;
-    
-    double emergency_threshold_s;   // 紧急阈值 (秒)
-    double warning_threshold_s;     // 警告阈值 (秒)
-    int max_boats;                 // 最大船只数
-    double min_route_gap_m;        // 最小航线间距 (米)
-    
-    // 从文件加载
-    static SystemConfig loadFromFile(const std::string& filename);
-};
-```
-
-## MQTT消息接口
-
-### MPC发布的消息
-
-#### 船只状态消息
-- **主题**: `mpc/boat_state/{boat_id}`
-- **QoS**: 0
-- **频率**: 1Hz
-- **格式**: JSON
-
-```json
-{
-  "boat_id": 1,
-  "timestamp": 1640995200,
-  "position": {
-    "lat": 30.549832,
-    "lng": 114.342922
-  },
-  "speed": 2.5,
-  "heading": 90.0,
-  "battery": 85,
-  "status": "ACTIVE"
-}
-```
-
-#### 碰撞告警消息
-- **主题**: `mpc/collision_alert/{boat_id}`
-- **QoS**: 1
-- **频率**: 事件触发
-- **格式**: JSON
-
-```json
-{
-  "boat_id": 1,
-  "alert_level": 2,
-  "collision_time": 15.5,
-  "collision_position": {
-    "lat": 30.549832,
-    "lng": 114.342922
-  },
-  "involved_boats": [2, 3],
-  "avoidance_action": "减速避让",
-  "timestamp": 1640995200
-}
-```
-
-#### 安全状态消息
-- **主题**: `mpc/safety_status/{boat_id}`
-- **QoS**: 1
-- **频率**: 0.2Hz
-- **格式**: JSON
-
-```json
-{
-  "boat_id": 1,
-  "safety_level": "SAFE",
-  "risk_factors": [],
-  "operational_status": "NORMAL",
-  "last_check": 1640995200
-}
-```
-
-#### 系统状态消息
-- **主题**: `mpc/system_status`
-- **QoS**: 1
-- **频率**: 0.1Hz
-- **格式**: JSON
-
-```json
-{
-  "system_id": "MPC_001",
-  "status": "OPERATIONAL",
-  "active_boats": 5,
-  "cpu_usage": 45.2,
-  "memory_usage": 62.1,
-  "uptime": 86400,
-  "timestamp": 1640995200
-}
-```
-
-#### 心跳消息
-- **主题**: `mpc/heartbeat/{boat_id}`
-- **QoS**: 0
-- **频率**: 0.1Hz
-- **格式**: JSON
-
-```json
-{
-  "boat_id": 1,
-  "status": "ACTIVE",
-  "timestamp": 1640995200
-}
-```
-
-### GCS发布的消息
-
-#### 任务配置消息
-- **主题**: `gcs/mission_config`
-- **QoS**: 2
-- **频率**: 按需
-- **格式**: JSON
-
-```json
-{
-  "mission_id": "MISSION_001",
-  "boat_count": 5,
-  "formation_type": "LINE",
-  "safety_distance": 10.0,
-  "max_speed": 3.0,
-  "operation_area": {
-    "center": {"lat": 30.55, "lng": 114.34},
-    "radius": 500
-  },
-  "timestamp": 1640995200
-}
-```
-
-#### 航线规划消息
-- **主题**: `gcs/route_plan/{route_id}`
-- **QoS**: 2
-- **频率**: 按需
-- **格式**: JSON
-
-```json
-{
-  "route_id": "ROUTE_001",
-  "waypoints": [
-    {"lat": 30.549832, "lng": 114.342922, "speed": 2.0},
-    {"lat": 30.550832, "lng": 114.343922, "speed": 2.5}
-  ],
-  "route_type": "CLOCKWISE",
-  "priority": 1,
-  "timestamp": 1640995200
-}
-```
-
-#### 安全参数消息
-- **主题**: `gcs/safety_params`
-- **QoS**: 2
-- **频率**: 按需
-- **格式**: JSON
-
-```json
-{
-  "emergency_threshold_s": 5,
-  "warning_threshold_s": 30,
-  "min_safe_distance": 5.0,
-  "max_collision_risk": 0.8,
-  "auto_avoidance_enabled": true,
-  "timestamp": 1640995200
-}
-```
-
-#### 紧急接管消息
-- **主题**: `gcs/emergency_override`
-- **QoS**: 2
-- **频率**: 紧急情况
-- **格式**: JSON
-
-```json
-{
-  "override_id": "EMERGENCY_001",
-  "boat_ids": [1, 2, 3],
-  "action": "STOP_ALL",
-  "reason": "人工接管",
-  "operator": "OPERATOR_001",
-  "timestamp": 1640995200
-}
 ```
 
 ## 使用示例
 
-### C++ API使用示例
+### 基本使用流程
 
-#### 基础碰撞检测
 ```cpp
-#include "collision_detector.h"
+#include "fleet_manager.h"
 #include "mqtt_communicator.h"
 
 int main() {
-    // 加载系统配置
-    SystemConfig config = SystemConfig::loadFromFile("config/system_config.json");
+    // 1. 初始化系统配置
+    SystemConfig config = SystemConfig::getDefault();
     
-    // 创建碰撞检测器
-    CollisionDetector detector(config);
+    // 2. 创建核心组件
+    FleetManager fleet_manager(config);
     
-    // 创建MQTT通信器
     MQTTConfig mqtt_config;
     mqtt_config.broker_host = "127.0.0.1";
-    mqtt_config.broker_port = 1883;
-    MQTTCommunicator mqtt(mqtt_config);
+    mqtt_config.broker_port = 2000;
+    mqtt_config.username = "vEagles";
+    mqtt_config.password = "123456";
+    MQTTCommunicator mqtt_comm(mqtt_config);
     
-    // 初始化MQTT连接
-    if (!mqtt.initialize() || !mqtt.connect()) {
-        std::cerr << "MQTT连接失败" << std::endl;
-        return -1;
-    }
-    
-    // 设置消息回调
-    mqtt.setMessageCallback([&](const std::string& topic, const std::string& message) {
-        if (topic.find("mpc/boat_state/") == 0) {
-            BoatState boat = BoatState::fromJson(message);
-            detector.updateBoatState(boat);
-            
-            // 检测碰撞
-            CollisionAlert alert = detector.detectCollision(boat.boat_id);
-            if (alert.alert_level > 0) {
-                mqtt.publishCollisionAlert(alert);
-            }
-        }
+    // 3. 设置MQTT回调
+    mqtt_comm.setBoatStateCallback([&](const BoatState& boat) {
+        fleet_manager.updateBoatState(boat);
     });
     
-    // 订阅船只状态
-    mqtt.subscribe("mpc/boat_state/+");
+    mqtt_comm.setDockInfoCallback([&](const DockInfo& dock) {
+        fleet_manager.updateDockInfo(dock);
+    });
     
-    // 主循环
+    // 4. 连接MQTT
+    mqtt_comm.initialize();
+    mqtt_comm.connect();
+    
+    // 5. 主循环
     while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // 执行安全检查
+        auto alerts = fleet_manager.performSafetyCheck();
+        
+        // 发布告警信息
+        for (const auto& alert : alerts) {
+            mqtt_comm.publishCollisionAlert(alert);
+        }
+        
+        // 发布状态信息
+        mqtt_comm.publishSafetyStatus(fleet_manager.generateSafetyStatus());
+        mqtt_comm.publishSystemStatus(fleet_manager.generateSystemStatus());
+        
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     
     return 0;
 }
 ```
 
-#### MQTT消息发布
+### 碰撞角度计算示例
+
 ```cpp
-// 发布船只状态
-BoatState boat;
-boat.boat_id = 1;
-boat.lat = 30.549832;
-boat.lng = 114.342922;
-boat.speed = 2.5;
-boat.heading = 90.0;
-boat.battery = 85;
-boat.status = "ACTIVE";
-boat.timestamp = time(nullptr);
+#include "types.h"
 
-mqtt.publishBoatState(boat);
-
-// 发布碰撞告警
-CollisionAlert alert;
-alert.boat_id = 1;
-alert.alert_level = 2;
-alert.collision_time = 15.5;
-alert.collision_position = {30.549832, 114.342922};
-alert.involved_boats = {2, 3};
-alert.avoidance_action = "减速避让";
-alert.timestamp = time(nullptr);
-
-mqtt.publishCollisionAlert(alert);
+void demonstrateCollisionAngle() {
+    // 计算两船碰撞角度
+    double boat1_heading = 45.0;  // 东北方向
+    double boat2_heading = 135.0; // 东南方向
+    
+    double angle = CollisionAlert::calculateCollisionAngle(boat1_heading, boat2_heading);
+    CollisionType type = CollisionAlert::determineCollisionType(angle);
+    std::string type_str = CollisionAlert::collisionTypeToString(type);
+    
+    std::cout << "碰撞角度: " << angle << "°" << std::endl;
+    std::cout << "碰撞类型: " << type_str << std::endl;
+    // 输出: 碰撞角度: 90°, 碰撞类型: crossing
+}
 ```
 
-### 命令行工具使用
+### 自定义决策生成示例
 
-#### MQTT消息发布
-```bash
-# 发布船只状态
-mosquitto_pub -h 127.0.0.1 -p 1883 \
-  -t "mpc/boat_state/1" \
-  -m '{"boat_id":1,"lat":30.5,"lng":114.3,"speed":2.5,"heading":90,"battery":85,"status":"ACTIVE","timestamp":1640995200}'
+```cpp
+#include "avoidance_decision_types.h"
 
-# 发布任务配置
-mosquitto_pub -h 127.0.0.1 -p 1883 \
-  -t "gcs/mission_config" \
-  -m '{"mission_id":"MISSION_001","boat_count":5,"formation_type":"LINE","safety_distance":10.0,"max_speed":3.0}'
+AvoidanceDecision generateCustomDecision(const CollisionAlert& alert, 
+                                       const BoatState& current_boat) {
+    // 基于碰撞角度选择决策
+    if (alert.collision_type == CollisionType::HEAD_ON) {
+        return AvoidanceDecision::HEAD_ON_TURN_RIGHT;
+    } else if (alert.collision_type == CollisionType::CROSSING) {
+        // 基于优先级决定
+        if (current_boat.status == BoatStatus::UNDOCKING) {
+            return AvoidanceDecision::UNDOCKING_MUST_YIELD;
+        } else if (current_boat.status == BoatStatus::DOCKING) {
+            return AvoidanceDecision::DOCKING_HAS_PRIORITY;
+        }
+    }
+    
+    return AvoidanceDecision::REDUCE_SPEED_AND_TURN_RIGHT;
+}
 ```
 
-#### MQTT消息订阅
-```bash
-# 监听所有MPC消息
-mosquitto_sub -h 127.0.0.1 -p 1883 -t "mpc/#" -v
+## 配置参数
 
-# 监听特定船只状态
-mosquitto_sub -h 127.0.0.1 -p 1883 -t "mpc/boat_state/1" -v
+### MQTT配置
 
-# 监听所有碰撞告警
-mosquitto_sub -h 127.0.0.1 -p 1883 -t "mpc/collision_alert/+" -v
+```json
+{
+    "broker": {
+        "host": "127.0.0.1",
+        "port": 2000,
+        "username": "vEagles",
+        "password": "123456",
+        "client_id": "MPC_CLIENT_001"
+    },
+    "topics": {
+        "boat_state": "mpc/BoatState",
+        "dock_info": "mpc/DockInfo",
+        "route_info": "mpc/RouteInfo",
+        "config": "mpc/Config",
+        "collision_alert": "mpc/CollisionAlert",
+        "safety_status": "mpc/SafetyStatus",
+        "system_status": "mpc/SystemStatus"
+    }
+}
 ```
 
-## 错误码定义
+### 系统配置
 
-### 系统错误码
-- **0**: 成功
-- **-1**: 一般错误
-- **-2**: 参数错误
-- **-3**: 连接错误
-- **-4**: 超时错误
-- **-5**: 资源不足
-
-### MQTT错误码
-- **100**: 连接成功
-- **101**: 协议版本不支持
-- **102**: 客户端ID无效
-- **103**: 服务器不可用
-- **104**: 用户名密码错误
-- **105**: 未授权
-
-### 碰撞检测错误码
-- **200**: 检测成功
-- **201**: 船只不存在
-- **202**: 数据不足
-- **203**: 算法错误
-
-## 性能指标
-
-### API性能
-- **碰撞检测延迟**: <10ms
-- **消息发布延迟**: <5ms
-- **内存使用**: <100MB
-- **CPU使用**: <20%
-
-### MQTT性能
-- **消息吞吐量**: >700 msg/s
-- **连接建立时间**: <1s
-- **重连时间**: <5s
-- **消息传输延迟**: <10ms
-
-## 版本兼容性
-
-### API版本
-- **v1.0**: 基础API接口
-- **v1.1**: 增加安全状态接口
-- **v1.2**: 增加系统配置接口
-
-### MQTT协议版本
-- **支持版本**: MQTT 3.1.1, MQTT 5.0
-- **推荐版本**: MQTT 3.1.1
-
-## 注意事项
-
-### 线程安全
-- 所有API接口都是线程安全的
-- MQTT回调函数在独立线程中执行
-- 建议使用互斥锁保护共享数据
-
-### 内存管理
-- 所有动态分配的内存都会自动释放
-- JSON解析使用智能指针管理内存
-- 建议定期检查内存使用情况
-
-### 错误处理
-- 所有API都有明确的返回值
-- 建议检查所有函数的返回值
-- 使用日志记录错误信息
-
-
+```json
+{
+    "boat": {
+        "length": 0.75,
+        "width": 0.47
+    },
+    "emergency_threshold_s": 5,
+    "warning_threshold_s": 30,
+    "max_boats": 30,
+    "min_route_gap_m": 10
+}
+```
