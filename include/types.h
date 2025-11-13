@@ -101,15 +101,6 @@ struct SystemConfig {
     static SystemConfig getDefault();
 };
 
-// 碰撞类型枚举
-enum class CollisionType {
-    OVERTAKING,      // 追尾碰撞 (0-30°)
-    OBLIQUE,         // 斜向碰撞 (30-60°)
-    CROSSING,        // 交叉碰撞 (60-120°)
-    OBLIQUE_HEAD_ON, // 斜向对撞 (120-150°)
-    HEAD_ON          // 正面对撞 (150-180°)
-};
-
 // 碰撞告警信息
 struct CollisionAlert {
     AlertLevel level;              // 紧急程度
@@ -138,15 +129,6 @@ struct CollisionAlert {
     std::string getDecisionDescription() const {
         return AvoidanceDecisionMapper::getChineseDescription(avoidance_decision);
     }
-    
-    // 碰撞角度计算
-    static double calculateCollisionAngle(double heading1, double heading2);
-    
-    // 碰撞类型判断
-    static CollisionType determineCollisionType(double angle);
-    
-    // 碰撞类型转字符串
-    static std::string collisionTypeToString(CollisionType type);
     
     Json::Value toJson() const;
 };

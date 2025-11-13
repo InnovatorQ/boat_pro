@@ -1,13 +1,13 @@
 #include "collision_detector.h"
 #include "geometry_utils.h"
 #include <algorithm>
-#include <sstream>
 #include <cmath>
+#include <iostream>
 
 namespace boat_pro {
 
 CollisionDetector::CollisionDetector(const SystemConfig& config) 
-    : config_(config), decision_engine_(std::make_unique<CollisionDecisionEngine>(config)) {
+    : config_(config) {
 }
 
 void CollisionDetector::updateBoatStates(const std::vector<BoatState>& boats) {
@@ -25,28 +25,19 @@ void CollisionDetector::setRouteInfo(const std::vector<RouteInfo>& routes) {
     route_info_ = routes;
 }
 
-// 辅助函数：将航向和速度转换为速度向量
-GeoPoint CollisionDetector::calculateVelocityVector(double heading, double speed) const {
-    // 航向：0度为正北，顺时针增加
-    // 速度向量：vx为东向分量，vy为北向分量
-    double vx = speed * std::sin(geometry::toRadians(heading));
-    double vy = speed * std::cos(geometry::toRadians(heading));
-    return GeoPoint(vy, vx);  // lat=vy(北向), lng=vx(东向)
-}
-
 std::vector<CollisionAlert> CollisionDetector::detectCollisions() {
     std::vector<CollisionAlert> alerts;
     
-    // 检测各类型碰撞
+    // 检测各种类型的碰撞
     auto undocking_alerts = detectUndockingCollisions();
     auto docking_alerts = detectDockingCollisions();
-    auto following_alerts = detectFollowingCollisions();
+    auto route_alerts = detectRouteCollisions();
     auto oncoming_alerts = detectOncomingCollisions();
     
     // 合并所有告警
     alerts.insert(alerts.end(), undocking_alerts.begin(), undocking_alerts.end());
     alerts.insert(alerts.end(), docking_alerts.begin(), docking_alerts.end());
-    alerts.insert(alerts.end(), following_alerts.begin(), following_alerts.end());
+    alerts.insert(alerts.end(), route_alerts.begin(), route_alerts.end());
     alerts.insert(alerts.end(), oncoming_alerts.begin(), oncoming_alerts.end());
     
     return alerts;
@@ -55,69 +46,22 @@ std::vector<CollisionAlert> CollisionDetector::detectCollisions() {
 std::vector<CollisionAlert> CollisionDetector::detectUndockingCollisions() {
     std::vector<CollisionAlert> alerts;
     
-    // 查找所有出坞状态的船只
     for (const auto& [boat_id, boat] : boat_states_) {
-        if (boat.status != BoatStatus::UNDOCKING) continue;
-        
-        CollisionAlert alert;
-        alert.current_boat_id = boat_id;
-        alert.current_heading = boat.heading;
-        alert.level = AlertLevel::NORMAL;
-        
-        double min_collision_time = std::numeric_limits<double>::max();
-        GeoPoint predicted_collision_pos;
-        double collision_angle = 0.0;
-        double other_boat_heading = 0.0;
-        
-        // 检查与其他船只的碰撞风险
-        for (const auto& [other_id, other_boat] : boat_states_) {
-            if (other_id == boat_id) continue;
-            
-            // 计算碰撞角度
-            double angle = CollisionAlert::calculateCollisionAngle(boat.heading, other_boat.heading);
-            
-            // 计算碰撞时间
-            GeoPoint boat_vel = calculateVelocityVector(boat.heading, boat.speed);
-            GeoPoint other_vel = calculateVelocityVector(other_boat.heading, other_boat.speed);
-                
-            double collision_time = geometry::calculateCollisionTime(
-                boat.getPosition(), boat_vel,
-                other_boat.getPosition(), other_vel,
-                getCollisionRadius()
-            );
-            
-            if (collision_time > 0 && collision_time < min_collision_time) {
-                min_collision_time = collision_time;
-                collision_angle = angle;
-                other_boat_heading = other_boat.heading;
-                
-                // 计算碰撞位置
-                predicted_collision_pos = geometry::calculateDestination(
-                    boat.getPosition(), boat.heading, boat.speed * collision_time);
-                
-                // 根据优先级判断
-                if (other_boat.status == BoatStatus::DOCKING ||
-                    other_boat.status == BoatStatus::NORMAL_SAIL) {
-                    alert.level = calculateAlertLevel(collision_time);
-                    
-                    if (isOncomingTraffic(boat, other_boat)) {
-                        alert.oncoming_boat_ids.push_back(other_id);
-                        alert.other_heading = other_boat.heading;
-                    } else {
-                        alert.front_boat_ids.push_back(other_id);
+        if (boat.status == BoatStatus::UNDOCKING) {
+            for (const auto& [other_id, other_boat] : boat_states_) {
+                if (boat_id != other_id) {
+                    double collision_time = calculateCollisionTime(boat, other_boat);
+                    if (collision_time > 0 && collision_time < config_.warning_threshold_s) {
+                        CollisionAlert alert;
+                        alert.current_boat_id = boat_id;
+                        alert.level = determineAlertLevel(collision_time);
+                        alert.collision_time = collision_time;
+                        alert.collision_position = calculateCollisionPosition(boat, other_boat);
+                        alert.avoidance_decision = generateDecisionAdvice(alert, boat);
+                        alerts.push_back(alert);
                     }
                 }
             }
-        }
-        
-        if (alert.level != AlertLevel::NORMAL) {
-            alert.collision_time = min_collision_time;
-            alert.collision_position = predicted_collision_pos;
-            alert.collision_angle = collision_angle;
-            alert.collision_type = CollisionAlert::determineCollisionType(collision_angle);
-            alert.other_heading = other_boat_heading;
-            alert.avoidance_decision = generateDecisionAdvice(alert, boat);
-            alerts.push_back(alert);
         }
     }
     
@@ -127,114 +71,47 @@ std::vector<CollisionAlert> CollisionDetector::detectUndockingCollisions() {
 std::vector<CollisionAlert> CollisionDetector::detectDockingCollisions() {
     std::vector<CollisionAlert> alerts;
     
-    // 查找所有入坞状态的船只
     for (const auto& [boat_id, boat] : boat_states_) {
-        if (boat.status != BoatStatus::DOCKING) continue;
-        
-        CollisionAlert alert;
-        alert.current_boat_id = boat_id;
-        alert.current_heading = boat.heading;
-        alert.level = AlertLevel::NORMAL;
-        
-        double min_collision_time = std::numeric_limits<double>::max();
-        GeoPoint predicted_collision_pos;
-        
-        // 检查与跟随船只的碰撞风险
-        for (const auto& [other_id, other_boat] : boat_states_) {
-            if (other_id == boat_id) continue;
-            
-            // 入坞船只具有最高优先级，其他船只需要避让
-            if (isOnSameRoute(boat, other_boat)) {
-                // 计算碰撞时间
-                GeoPoint boat_vel = calculateVelocityVector(boat.heading, boat.speed);
-                GeoPoint other_vel = calculateVelocityVector(other_boat.heading, other_boat.speed);
-                    
-                double collision_time = geometry::calculateCollisionTime(
-                    boat.getPosition(), boat_vel,
-                    other_boat.getPosition(), other_vel,
-                    getCollisionRadius()
-                );
-                
-                if (collision_time > 0 && collision_time < min_collision_time) {
-                    min_collision_time = collision_time;
-                    alert.level = calculateAlertLevel(collision_time);
-                    alert.front_boat_ids.push_back(other_id);
-                    
-                    // 计算碰撞位置
-                    predicted_collision_pos = geometry::calculateDestination(
-                        boat.getPosition(), boat.heading, boat.speed * collision_time);
+        if (boat.status == BoatStatus::DOCKING) {
+            for (const auto& [other_id, other_boat] : boat_states_) {
+                if (boat_id != other_id) {
+                    double collision_time = calculateCollisionTime(boat, other_boat);
+                    if (collision_time > 0 && collision_time < config_.warning_threshold_s) {
+                        CollisionAlert alert;
+                        alert.current_boat_id = boat_id;
+                        alert.level = determineAlertLevel(collision_time);
+                        alert.collision_time = collision_time;
+                        alert.collision_position = calculateCollisionPosition(boat, other_boat);
+                        alert.avoidance_decision = generateDecisionAdvice(alert, boat);
+                        alerts.push_back(alert);
+                    }
                 }
             }
-        }
-        
-        if (alert.level != AlertLevel::NORMAL) {
-            alert.collision_time = min_collision_time;
-            alert.collision_position = predicted_collision_pos;
-            alert.avoidance_decision = generateDecisionAdvice(alert, boat);
-            alerts.push_back(alert);
         }
     }
     
     return alerts;
 }
 
-std::vector<CollisionAlert> CollisionDetector::detectFollowingCollisions() {
+std::vector<CollisionAlert> CollisionDetector::detectRouteCollisions() {
     std::vector<CollisionAlert> alerts;
     
-    // 查找所有正常航行状态的船只
     for (const auto& [boat_id, boat] : boat_states_) {
-        if (boat.status != BoatStatus::NORMAL_SAIL) continue;
-        
-        CollisionAlert alert;
-        alert.current_boat_id = boat_id;
-        alert.current_heading = boat.heading;
-        alert.level = AlertLevel::NORMAL;
-        
-        double min_collision_time = std::numeric_limits<double>::max();
-        GeoPoint predicted_collision_pos;
-        int closest_front_boat = -1;
-        
-        // 检查与同航线前方船只的碰撞风险
-        for (const auto& [other_id, other_boat] : boat_states_) {
-            if (other_id == boat_id) continue;
-            
-            if (isOnSameRoute(boat, other_boat) && !isOncomingTraffic(boat, other_boat)) {
-                // 判断是否为前方船只
-                double bearing_to_other = geometry::calculateBearing(
-                    boat.getPosition(), other_boat.getPosition());
-                double heading_diff = geometry::angleDifference(boat.heading, bearing_to_other);
-                
-                if (heading_diff < 45.0) { // 前方45度范围内
-                    // 计算碰撞时间
-                    GeoPoint boat_vel = calculateVelocityVector(boat.heading, boat.speed);
-                    GeoPoint other_vel = calculateVelocityVector(other_boat.heading, other_boat.speed);
-                        
-                    double collision_time = geometry::calculateCollisionTime(
-                        boat.getPosition(), boat_vel,
-                        other_boat.getPosition(), other_vel,
-                        getCollisionRadius()
-                    );
-                    
-                    if (collision_time > 0 && collision_time < min_collision_time) {
-                        min_collision_time = collision_time;
-                        closest_front_boat = other_id;
-                        
-                        // 计算碰撞位置
-                        predicted_collision_pos = geometry::calculateDestination(
-                            boat.getPosition(), boat.heading, boat.speed * collision_time);
-                        
-                        alert.level = calculateAlertLevel(collision_time);
+        if (boat.status == BoatStatus::NORMAL_SAIL) {
+            for (const auto& [other_id, other_boat] : boat_states_) {
+                if (boat_id != other_id && other_boat.status == BoatStatus::NORMAL_SAIL) {
+                    double collision_time = calculateCollisionTime(boat, other_boat);
+                    if (collision_time > 0 && collision_time < config_.warning_threshold_s) {
+                        CollisionAlert alert;
+                        alert.current_boat_id = boat_id;
+                        alert.level = determineAlertLevel(collision_time);
+                        alert.collision_time = collision_time;
+                        alert.collision_position = calculateCollisionPosition(boat, other_boat);
+                        alert.avoidance_decision = generateDecisionAdvice(alert, boat);
+                        alerts.push_back(alert);
                     }
                 }
             }
-        }
-        
-        if (alert.level != AlertLevel::NORMAL && closest_front_boat != -1) {
-            alert.front_boat_ids.push_back(closest_front_boat);
-            alert.collision_time = min_collision_time;
-            alert.collision_position = predicted_collision_pos;
-            alert.avoidance_decision = generateDecisionAdvice(alert, boat);
-            alerts.push_back(alert);
         }
     }
     
@@ -244,118 +121,72 @@ std::vector<CollisionAlert> CollisionDetector::detectFollowingCollisions() {
 std::vector<CollisionAlert> CollisionDetector::detectOncomingCollisions() {
     std::vector<CollisionAlert> alerts;
     
-    // 查找所有正常航行状态的船只
     for (const auto& [boat_id, boat] : boat_states_) {
-        if (boat.status != BoatStatus::NORMAL_SAIL) continue;
-        
-        CollisionAlert alert;
-        alert.current_boat_id = boat_id;
-        alert.current_heading = boat.heading;
-        alert.level = AlertLevel::NORMAL;
-        
-        double min_collision_time = std::numeric_limits<double>::max();
-        GeoPoint predicted_collision_pos;
-        
-        // 检查与对向船只的碰撞风险
         for (const auto& [other_id, other_boat] : boat_states_) {
-            if (other_id == boat_id) continue;
-            
-            if (isOncomingTraffic(boat, other_boat)) {
-                // 计算碰撞时间
-                GeoPoint boat_vel = calculateVelocityVector(boat.heading, boat.speed);
-                GeoPoint other_vel = calculateVelocityVector(other_boat.heading, other_boat.speed);
-                    
-                double collision_time = geometry::calculateCollisionTime(
-                    boat.getPosition(), boat_vel,
-                    other_boat.getPosition(), other_vel,
-                    getCollisionRadius()
-                );
-                
-                if (collision_time > 0 && collision_time < min_collision_time) {
-                    min_collision_time = collision_time;
-                    alert.level = calculateAlertLevel(collision_time);
-                    alert.oncoming_boat_ids.push_back(other_id);
-                    alert.other_heading = other_boat.heading;
-                    
-                    // 计算碰撞位置
-                    predicted_collision_pos = geometry::calculateDestination(
-                        boat.getPosition(), boat.heading, boat.speed * collision_time);
+            if (boat_id != other_id) {
+                double heading_diff = std::abs(boat.heading - other_boat.heading);
+                if (heading_diff > 90 && heading_diff < 270) {
+                    double collision_time = calculateCollisionTime(boat, other_boat);
+                    if (collision_time > 0 && collision_time < config_.warning_threshold_s) {
+                        CollisionAlert alert;
+                        alert.current_boat_id = boat_id;
+                        alert.level = determineAlertLevel(collision_time);
+                        alert.collision_time = collision_time;
+                        alert.collision_position = calculateCollisionPosition(boat, other_boat);
+                        alert.oncoming_boat_ids.push_back(other_id);
+                        alert.current_heading = boat.heading;
+                        alert.other_heading = other_boat.heading;
+                        alert.avoidance_decision = generateDecisionAdvice(alert, boat);
+                        alerts.push_back(alert);
+                    }
                 }
             }
-        }
-        
-        if (alert.level != AlertLevel::NORMAL) {
-            alert.collision_time = min_collision_time;
-            alert.collision_position = predicted_collision_pos;
-            alert.avoidance_decision = generateDecisionAdvice(alert, boat);
-            alerts.push_back(alert);
         }
     }
     
     return alerts;
 }
 
-AlertLevel CollisionDetector::calculateAlertLevel(double collision_time) const {
+double CollisionDetector::calculateCollisionTime(const BoatState& boat1, const BoatState& boat2) const {
+    double distance = geometry::calculateDistance(
+        GeoPoint(boat1.lat, boat1.lng), 
+        GeoPoint(boat2.lat, boat2.lng)
+    );
+    
+    double relative_speed = boat1.speed + boat2.speed;
+    
+    if (relative_speed > 0) {
+        return distance / relative_speed;
+    }
+    
+    return -1;
+}
+
+GeoPoint CollisionDetector::calculateCollisionPosition(const BoatState& boat1, const BoatState& boat2) const {
+    return GeoPoint(
+        (boat1.lat + boat2.lat) / 2.0,
+        (boat1.lng + boat2.lng) / 2.0
+    );
+}
+
+AlertLevel CollisionDetector::determineAlertLevel(double collision_time) const {
     if (collision_time <= config_.emergency_threshold_s) {
         return AlertLevel::EMERGENCY;
     } else if (collision_time <= config_.warning_threshold_s) {
         return AlertLevel::WARNING;
+    } else {
+        return AlertLevel::NORMAL;
     }
-    return AlertLevel::NORMAL;
 }
 
 AvoidanceDecision CollisionDetector::generateDecisionAdvice(const CollisionAlert& alert, const BoatState& current_boat) const {
-    // 使用决策引擎生成文本建议，然后转换为枚举
-    std::string text_advice = decision_engine_->generateAdvancedDecision(alert, current_boat, boat_states_);
-    
-    // 根据告警等级和文本内容推荐决策代码
     if (alert.level == AlertLevel::EMERGENCY) {
-        if (text_advice.find("紧急停船") != std::string::npos) {
-            return AvoidanceDecision::EMERGENCY_STOP;
-        } else if (text_advice.find("右转") != std::string::npos) {
-            return AvoidanceDecision::EMERGENCY_TURN_RIGHT;
-        } else if (text_advice.find("左转") != std::string::npos) {
-            return AvoidanceDecision::EMERGENCY_TURN_LEFT;
-        } else if (text_advice.find("出坞") != std::string::npos) {
-            return AvoidanceDecision::UNDOCKING_MUST_YIELD;
-        } else {
-            return AvoidanceDecision::EMERGENCY_STOP;
-        }
+        return AvoidanceDecision::EMERGENCY_STOP;
     } else if (alert.level == AlertLevel::WARNING) {
-        if (text_advice.find("减速") != std::string::npos && text_advice.find("右转") != std::string::npos) {
-            return AvoidanceDecision::REDUCE_SPEED_AND_TURN_RIGHT;
-        } else if (text_advice.find("减速") != std::string::npos && text_advice.find("左转") != std::string::npos) {
-            return AvoidanceDecision::REDUCE_SPEED_AND_TURN_LEFT;
-        } else if (text_advice.find("减速") != std::string::npos) {
-            return AvoidanceDecision::REDUCE_SPEED;
-        } else if (text_advice.find("交叉") != std::string::npos && text_advice.find("让") != std::string::npos) {
-            return AvoidanceDecision::CROSSING_GIVE_WAY;
-        } else if (text_advice.find("入坞") != std::string::npos) {
-            return AvoidanceDecision::DOCKING_HAS_PRIORITY;
-        } else {
-            return AvoidanceDecision::YIELD_TO_PRIORITY_VESSEL;
-        }
+        return AvoidanceDecision::REDUCE_SPEED_AND_TURN_RIGHT;
     } else {
         return AvoidanceDecision::CONTINUE_NORMAL;
     }
 }
 
-double CollisionDetector::getCollisionRadius() const {
-    // 安全距离设为船只长度的2倍
-    return config_.boat.length * 2.0;
 }
-
-bool CollisionDetector::isOnSameRoute(const BoatState& boat1, const BoatState& boat2) const {
-    // 由于新的数据格式不包含route_direction，改用航向角度判断
-    // 如果两船航向角度相近（差异小于45度），认为在同一航线上
-    double heading_diff = geometry::angleDifference(boat1.heading, boat2.heading);
-    return heading_diff < 45.0 || heading_diff > 315.0;
-}
-
-bool CollisionDetector::isOncomingTraffic(const BoatState& boat1, const BoatState& boat2) const {
-    // 对向交通：航向差接近180度
-    double heading_diff = geometry::angleDifference(boat1.heading, boat2.heading);
-    return heading_diff > 135.0 && heading_diff < 225.0; // 允许45度误差
-}
-
-} // namespace boat_pro

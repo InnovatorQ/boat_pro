@@ -3,10 +3,8 @@
 #define BOAT_PRO_COLLISION_DETECTOR_H
 
 #include "types.h"
-#include "collision_decision_engine.h"
 #include <vector>
 #include <map>
-#include <memory>
 
 namespace boat_pro {
 
@@ -44,7 +42,6 @@ private:
     std::map<int, BoatState> boat_states_;
     std::vector<DockInfo> dock_info_;
     std::vector<RouteInfo> route_info_;
-    std::unique_ptr<CollisionDecisionEngine> decision_engine_;
     
     /**
      * 检测出坞碰撞
@@ -57,44 +54,34 @@ private:
     std::vector<CollisionAlert> detectDockingCollisions();
     
     /**
-     * 检测正常航行时的前后船碰撞
+     * 检测航线碰撞
      */
-    std::vector<CollisionAlert> detectFollowingCollisions();
+    std::vector<CollisionAlert> detectRouteCollisions();
     
     /**
-     * 检测对向航行碰撞
+     * 检测对向碰撞
      */
     std::vector<CollisionAlert> detectOncomingCollisions();
     
     /**
-     * 计算碰撞告警等级
-     */
-    AlertLevel calculateAlertLevel(double collision_time) const;
-    
-    /**
-     * 生成避碰决策建议（使用智能决策引擎）
+     * 生成决策建议
      */
     AvoidanceDecision generateDecisionAdvice(const CollisionAlert& alert, const BoatState& current_boat) const;
     
     /**
-     * 获取船只的碰撞半径
+     * 计算碰撞时间
      */
-    double getCollisionRadius() const;
+    double calculateCollisionTime(const BoatState& boat1, const BoatState& boat2) const;
     
     /**
-     * 判断两船是否在同一航线上
+     * 计算碰撞位置
      */
-    bool isOnSameRoute(const BoatState& boat1, const BoatState& boat2) const;
+    GeoPoint calculateCollisionPosition(const BoatState& boat1, const BoatState& boat2) const;
     
     /**
-     * 判断两船是否对向航行
+     * 判断告警等级
      */
-    bool isOncomingTraffic(const BoatState& boat1, const BoatState& boat2) const;
-    
-    /**
-     * 计算速度向量
-     */
-    GeoPoint calculateVelocityVector(double heading, double speed) const;
+    AlertLevel determineAlertLevel(double collision_time) const;
 };
 
 } // namespace boat_pro
